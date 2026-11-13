@@ -1,0 +1,6 @@
+{
+  "name": "AstroBase: Junior Astronaut Mission Trainer",
+  "description": "An interactive 2D space outpost survival game for kids ages 7-12, powered by real NASA DONKI and OSDR open science data to teach deep-space engineering trade-offs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

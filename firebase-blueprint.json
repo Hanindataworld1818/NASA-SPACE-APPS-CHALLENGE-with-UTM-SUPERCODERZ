@@ -1,0 +1,184 @@
+{
+  "entities": {
+    "MissionLog": {
+      "title": "MissionLog",
+      "description": "A saved Junior Astronaut mission run record with survival metrics and NASA trade-off choices.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the astronaut player.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "astronautName": {
+          "type": "string",
+          "description": "Display callsign of the Junior Astronaut.",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "siteId": {
+          "type": "string",
+          "description": "Mission outpost site identifier.",
+          "enum": ["moon", "mars"]
+        },
+        "solReached": {
+          "type": "integer",
+          "description": "Highest Sol reached between 1 and 7."
+        },
+        "score": {
+          "type": "integer",
+          "description": "Final mission training score."
+        },
+        "oxygenRemaining": {
+          "type": "integer",
+          "description": "Final O2 percentage."
+        },
+        "radiationMsv": {
+          "type": "number",
+          "description": "Cumulative radiation dose in mSv."
+        },
+        "outcome": {
+          "type": "string",
+          "description": "Final mission outcome state.",
+          "enum": ["victory", "defeat", "in_progress"]
+        },
+        "summaryNote": {
+          "type": "string",
+          "description": "Brief mission summary or transcribed voice log.",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "milestonesSummary": {
+          "type": "string",
+          "description": "Daily survival milestones summary across Sols.",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "personalNote": {
+          "type": "string",
+          "description": "Player personal text observation or logbook note.",
+          "minLength": 1,
+          "maxLength": 400
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        }
+      },
+      "required": [
+        "ownerId",
+        "astronautName",
+        "siteId",
+        "solReached",
+        "score",
+        "oxygenRemaining",
+        "radiationMsv",
+        "outcome",
+        "summaryNote",
+        "milestonesSummary",
+        "personalNote",
+        "createdAt"
+      ]
+    },
+    "CustomInstructionProfile": {
+      "title": "CustomInstructionProfile",
+      "description": "User-defined custom instructions for Gemini mission events, voice log coaching, and space music generation.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "commanderStyle": {
+          "type": "string",
+          "description": "Selected voice/persona style for AI Mission Control.",
+          "enum": ["among_us_crew", "nasa_mission_control", "story_adventure", "science_coach"]
+        },
+        "targetAgeGroup": {
+          "type": "string",
+          "description": "Target learner age group.",
+          "enum": ["7-9", "10-12", "classroom"]
+        },
+        "customRules": {
+          "type": "string",
+          "description": "Custom instructions text for Gemini.",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp."
+        }
+      },
+      "required": ["ownerId", "commanderStyle", "targetAgeGroup", "customRules", "updatedAt"]
+    },
+    "SoundtrackRecord": {
+      "title": "SoundtrackRecord",
+      "description": "A generated space outpost soundtrack or jingle metadata record.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the creator.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the space track.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Prompt used to generate the soundtrack.",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "mood": {
+          "type": "string",
+          "description": "Musical mood preset.",
+          "enum": ["calm_orbit", "solar_storm_alert", "hydroponic_zen", "victory_fanfare"]
+        },
+        "bpm": {
+          "type": "integer",
+          "description": "Tempo in beats per minute."
+        },
+        "lyrics": {
+          "type": "string",
+          "description": "Generated space jingle lyrics.",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        }
+      },
+      "required": ["ownerId", "title", "prompt", "mood", "bpm", "lyrics", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/missionLogs/{logId}": {
+      "schema": { "$ref": "#/entities/MissionLog" },
+      "description": "Stores astronaut mission run logs owned by each user."
+    },
+    "/customInstructions/{userId}": {
+      "schema": { "$ref": "#/entities/CustomInstructionProfile" },
+      "description": "Stores custom Gemini instructions per user."
+    },
+    "/soundtracks/{trackId}": {
+      "schema": { "$ref": "#/entities/SoundtrackRecord" },
+      "description": "Stores generated space soundtrack records per user."
+    }
+  }
+}
