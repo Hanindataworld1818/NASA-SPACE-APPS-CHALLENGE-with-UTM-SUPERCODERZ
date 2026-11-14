@@ -389,6 +389,14 @@ async function startServer() {
         bassNotes: [38, 45, 42, 38],
         padNotes: [50, 57, 62],
       },
+      foodlab: {
+        title: 'Galley Feast & Lounge Swing',
+        bpm: 108,
+        synthWave: 'triangle',
+        melodyNotes: [60, 64, 67, 69, 72, 69, 67, 64],
+        bassNotes: [36, 40, 43, 45],
+        padNotes: [48, 52, 55],
+      },
       shield: {
         title: 'Water-Wall Bastion Hum',
         bpm: 106,
@@ -412,6 +420,14 @@ async function startServer() {
         melodyNotes: [64, 67, 71, 74, 76, 74, 71, 67],
         bassNotes: [40, 43, 45, 47],
         padNotes: [52, 59, 64],
+      },
+      academy: {
+        title: 'Academy STEM Quiz Fanfare',
+        bpm: 110,
+        synthWave: 'triangle',
+        melodyNotes: [64, 67, 72, 76, 74, 72, 67, 64],
+        bassNotes: [36, 40, 43, 36],
+        padNotes: [48, 55, 60],
       },
       corridor: {
         title: 'Starlight Spine Promenade',
@@ -457,9 +473,11 @@ async function startServer() {
           power: 'Kilopower Nuclear Fission & Solar Grid bay with humming turbines',
           lifesupport: 'O2 Water Electrolyzer Bay with gentle bubbling oxygen tanks',
           hydroponics: 'Lush Hydroponic Bio-Dome with glowing pink/blue plant LEDs',
+          foodlab: 'Cheerful Space Food Lab, Astro-Kitchen & Crew Dining Lounge',
           shield: 'Deep Radiation Shield Vault surrounded by thick water-wall armor',
           eva: 'Rover & EVA Surface Airlock looking out at dusty craters',
           comms: 'Deep Space Network Comms & Synth Sound Deck',
+          academy: 'Junior Astronaut Academy Station learning & quiz center',
           corridor: 'Central pressurized space station spine corridor',
         };
         const aiRes = await ai.models.generateContent({
@@ -636,6 +654,486 @@ async function startServer() {
     } catch {
       return res.status(200).json({ fallback: true });
     }
+  });
+
+  // 5. Real NASA Open Data Server-Side Proxies (DONKI, APOD, Mars Rover Photos, OSDR Search, RadLab)
+  const nasaApiKey = process.env.NASA_API_KEY || 'QkwbdwDpGwFHMCBmqWCd8F6fFjtDFzBQqCj8GwdC';
+  const nasaProxyCache = new Map<string, { expiresAt: number; payload: unknown }>();
+  const getCachedNasa = (key: string) => {
+    const hit = nasaProxyCache.get(key);
+    if (hit && hit.expiresAt > Date.now()) return hit.payload;
+    return null;
+  };
+  const setCachedNasa = (key: string, payload: unknown, ttlMs: number = 10 * 60 * 1000) => {
+    nasaProxyCache.set(key, { expiresAt: Date.now() + ttlMs, payload });
+  };
+
+  app.get('/api/nasa/donki', async (_req, res) => {
+    const cached = getCachedNasa('donki');
+    if (cached) return res.json(cached);
+
+    const end = new Date();
+    const start = new Date(end.getTime() - 45 * 24 * 60 * 60 * 1000);
+    const startStr = start.toISOString().slice(0, 10);
+    const endStr = end.toISOString().slice(0, 10);
+
+    try {
+      const [flrRes, cmeRes] = await Promise.all([
+        fetch(
+          `https://api.nasa.gov/DONKI/FLR?startDate=${startStr}&endDate=${endStr}&api_key=${encodeURIComponent(
+            nasaApiKey
+          )}`,
+          { signal: AbortSignal.timeout(4500) }
+        ),
+        fetch(
+          `https://api.nasa.gov/DONKI/CME?startDate=${startStr}&endDate=${endStr}&api_key=${encodeURIComponent(
+            nasaApiKey
+          )}`,
+          { signal: AbortSignal.timeout(4500) }
+        ).catch(() => null),
+      ]);
+
+      if (!flrRes.ok) throw new Error(`DONKI HTTP ${flrRes.status}`);
+      const flrJson = await flrRes.json();
+      const cmeJson = cmeRes && cmeRes.ok ? await cmeRes.json().catch(() => []) : [];
+      if (Array.isArray(flrJson) && flrJson.length > 0) {
+        const payload = {
+          status: 'live',
+          events: flrJson
+            .slice(-6)
+            .reverse()
+            .map((item: Record<string, unknown>) => ({
+              flrID: String(item.flrID || 'DONKI-FLR'),
+              beginTime: String(item.beginTime || ''),
+              peakTime: String(item.peakTime || ''),
+              classType: String(item.classType || 'M1.0'),
+              sourceLocation: String(item.sourceLocation || 'Active Sunspot'),
+              link: String(item.link || 'https://kauai.ccmc.gsfc.nasa.gov/DONKI/'),
+            })),
+          cmeCount: Array.isArray(cmeJson) ? cmeJson.length : 0,
+        };
+        setCachedNasa('donki', payload);
+        return res.json(payload);
+      }
+    } catch {
+      // Fallback handled below cleanly
+    }
+
+    return res.json({ status: 'archive', events: [], cmeCount: 0 });
+  });
+
+  app.get('/api/nasa/apod', async (_req, res) => {
+    const cached = getCachedNasa('apod');
+    if (cached) return res.json(cached);
+
+    try {
+      const r = await fetch(
+        `https://api.nasa.gov/planetary/apod?api_key=${encodeURIComponent(nasaApiKey)}&thumbs=true`,
+        { signal: AbortSignal.timeout(4500) }
+      );
+      if (r.ok) {
+        const d = await r.json();
+        if (d && d.title && (d.url || d.thumbnail_url)) {
+          const payload = {
+            status: 'live',
+            title: String(d.title),
+            date: String(d.date || ''),
+            explanation: String(d.explanation || ''),
+            imageUrl: String(d.media_type === 'video' ? d.thumbnail_url || d.url : d.url),
+            copyright: d.copyright ? String(d.copyright) : 'NASA / Public Domain',
+          };
+          setCachedNasa('apod', payload, 30 * 60 * 1000);
+          return res.json(payload);
+        }
+      }
+    } catch {
+      // Try NASA Images API live spotlight as secondary live source
+    }
+
+    try {
+      const r2 = await fetch(
+        'https://images-api.nasa.gov/search?q=perseverance%20jezero%20crater%20mars&media_type=image&page_size=4',
+        { signal: AbortSignal.timeout(4500) }
+      );
+      if (r2.ok) {
+        const j2 = await r2.json();
+        const item = j2?.collection?.items?.[0];
+        const meta = item?.data?.[0];
+        const href = item?.links?.[0]?.href;
+        if (meta && href) {
+          const payload = {
+            status: 'live-images-api',
+            title: String(meta.title || 'Jezero Crater Landing Site'),
+            date: String((meta.date_created || '').slice(0, 10)),
+            explanation: String(meta.description || '').slice(0, 360),
+            imageUrl: String(href),
+            copyright: String(meta.center || 'NASA JPL'),
+          };
+          setCachedNasa('apod', payload, 20 * 60 * 1000);
+          return res.json(payload);
+        }
+      }
+    } catch {
+      // Deterministic curated fallback below
+    }
+
+    return res.json({ status: 'archive', title: '', date: '', explanation: '', imageUrl: '' });
+  });
+
+  app.get('/api/nasa/mars-photos', async (_req, res) => {
+    const cached = getCachedNasa('mars-photos');
+    if (cached) return res.json(cached);
+
+    try {
+      const r = await fetch(
+        'https://mars.nasa.gov/rss/api/?feed=raw_images&category=mars2020&feedtype=json&num=6&page=0&order=sol+desc',
+        { signal: AbortSignal.timeout(4500) }
+      );
+      if (r.ok) {
+        const d = await r.json();
+        const imgs = Array.isArray(d?.images) ? d.images : [];
+        if (imgs.length > 0) {
+          const photos = imgs.slice(0, 6).map((img: Record<string, unknown>, idx: number) => {
+            const files = (img.image_files as Record<string, string> | undefined) || {};
+            const camera = (img.camera as Record<string, string> | undefined) || {};
+            return {
+              id: String(img.imageid || `m2020-${idx}`),
+              sol: Number(img.sol || 1000),
+              earthDate: String(img.date_taken_utc || '').slice(0, 10) || 'Recent Sol',
+              cameraName: String(camera.instrument || 'MASTCAM / SUPERCAM'),
+              title: String(img.title || `Perseverance Sol ${img.sol || ''}`),
+              caption: String(img.caption || 'Raw surface image captured in Jezero Crater, Mars.'),
+              imgSrc: String(files.medium || files.small || files.full_res || ''),
+            };
+          });
+          const payload = { status: 'live', rover: 'Perseverance (Mars 2020)', photos };
+          setCachedNasa('mars-photos', payload, 15 * 60 * 1000);
+          return res.json(payload);
+        }
+      }
+    } catch {
+      // Fallback below
+    }
+
+    return res.json({ status: 'archive', rover: 'Perseverance (Mars 2020)', photos: [] });
+  });
+
+  app.get('/api/nasa/osdr-search', async (req, res) => {
+    const q = String(req.query.q || 'bone').trim().slice(0, 80) || 'bone';
+    const cacheKey = `osdr:${q.toLowerCase()}`;
+    const cached = getCachedNasa(cacheKey);
+    if (cached) return res.json(cached);
+
+    try {
+      const url = `https://osdr.nasa.gov/osdr/data/search?term=${encodeURIComponent(
+        q
+      )}&from=0&size=5&type=cgene`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(4500) });
+      if (r.ok) {
+        const d = await r.json();
+        const hits = Array.isArray(d?.hits?.hits) ? d.hits.hits : [];
+        const total = Number(d?.hits?.total || hits.length);
+        const studies = hits.map((h: Record<string, unknown>) => {
+          const src = (h._source as Record<string, unknown>) || {};
+          const rawDesc = String(src['Study Description'] || src['Study Protocol Description'] || '');
+          return {
+            accessionId: String(src.Accession || h._id || 'OSDR'),
+            title: String(src['Study Title'] || 'NASA Space Biology Study'),
+            organism: String(src.organism || 'Spaceflight Model Organism'),
+            mission: String(src['Flight Program'] || src.Mission || 'NASA ISS / Space Biology'),
+            keyFinding: rawDesc.slice(0, 260) + (rawDesc.length > 260 ? '...' : ''),
+            sourceUrl: String(
+              src['Authoritative Source URL'] ||
+                `https://osdr.nasa.gov/bio/repo/data/studies/${String(src.Accession || '')}`
+            ),
+          };
+        });
+        const payload = { status: 'live', query: q, totalHits: total, studies };
+        setCachedNasa(cacheKey, payload, 15 * 60 * 1000);
+        return res.json(payload);
+      }
+    } catch {
+      // Archive fallback handled cleanly on client/server
+    }
+
+    return res.json({ status: 'archive', query: q, totalHits: 0, studies: [] });
+  });
+
+  app.get('/api/nasa/radlab', async (_req, res) => {
+    const cached = getCachedNasa('radlab');
+    if (cached) return res.json(cached);
+
+    try {
+      const url =
+        'https://visualization.osdr.nasa.gov/radlab/api?query=(instrument=DosTel1)AND(timestamp>=2024-05-10)AND(timestamp<=2024-05-12)&fields+=absorbed_dose_rate&format=json';
+      const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      if (r.ok) {
+        const d = await r.json();
+        const cols: string[] = Array.isArray(d?.columns) ? d.columns : [];
+        const rows: unknown[][] = Array.isArray(d?.data) ? d.data : [];
+        const tsIdx = cols.indexOf('timestamp');
+        const rateIdx = cols.indexOf('absorbed_dose_rate');
+        const instIdx = cols.indexOf('instrument_id');
+        if (rateIdx >= 0 && rows.length > 0) {
+          const sampled = rows
+            .filter((_, idx) => idx % Math.max(1, Math.floor(rows.length / 8)) === 0)
+            .slice(0, 8)
+            .map((row) => ({
+              timestamp: String(row[tsIdx] || ''),
+              instrument: String(row[instIdx] || 'DosTel1'),
+              doseRateUgyPerDay: Number((Number(row[rateIdx] || 0) * 24).toFixed(1)),
+              rawRate: Number(row[rateIdx] || 0),
+            }));
+          const avgRate =
+            sampled.reduce((acc, s) => acc + s.doseRateUgyPerDay, 0) / Math.max(1, sampled.length);
+          const payload = {
+            status: 'live',
+            sampleCount: rows.length,
+            issDosTelAvgUgyDay: Number(avgRate.toFixed(1)),
+            samples: sampled,
+          };
+          setCachedNasa('radlab', payload, 20 * 60 * 1000);
+          return res.json(payload);
+        }
+      }
+    } catch {
+      // Curated verified RadLab fallback below
+    }
+
+    return res.json({ status: 'archive', sampleCount: 0, issDosTelAvgUgyDay: 245, samples: [] });
+  });
+
+  // 5b. NASA Mars Trek & Moon Trek WMTS Tile Proxy + Outpost Image Gallery
+  const trekTileByteCache = new Map<string, { expiresAt: number; buf: Buffer; contentType: string }>();
+  const ALLOWED_TREK_LAYERS = new Set([
+    'Mars_Viking_MDIM21_ClrMosaic_global_232m',
+    'Mars_MGS_MOLA_ClrShade_merge_global_463m',
+    'Lunar_LRO_LROC-WAC_Mosaic_global_100m_June2013',
+    'Lunar_LRO_LOLA_ClrShade_Global_128ppd_v04',
+  ]);
+
+  app.get('/api/nasa/trek-tile', async (req, res) => {
+    const planet = req.query.planet === 'Moon' ? 'Moon' : 'Mars';
+    const layer = String(req.query.layer || 'Mars_Viking_MDIM21_ClrMosaic_global_232m');
+    if (!ALLOWED_TREK_LAYERS.has(layer)) {
+      return res.status(400).json({ error: 'Invalid Trek layer' });
+    }
+    const z = Math.max(0, Math.min(5, Math.round(Number(req.query.z) || 2)));
+    const row = Math.max(0, Math.min(64, Math.round(Number(req.query.row) || 0)));
+    const col = Math.max(0, Math.min(128, Math.round(Number(req.query.col) || 0)));
+
+    const cacheKey = `${planet}:${layer}:${z}:${row}:${col}`;
+    const hit = trekTileByteCache.get(cacheKey);
+    if (hit && hit.expiresAt > Date.now()) {
+      res.setHeader('Content-Type', hit.contentType);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.send(hit.buf);
+    }
+
+    const upstreamUrl =
+      planet === 'Moon'
+        ? `https://trek.nasa.gov/tiles/Moon/EQ/${layer}/1.0.0/default/default028mm/${z}/${row}/${col}.jpg`
+        : `https://trek.nasa.gov/tiles/Mars/EQ/${layer}/1.0.0/default/default028mm/${z}/${row}/${col}.jpg`;
+
+    const sendFallbackTrekSvg = () => {
+      const isMoon = planet === 'Moon';
+      const bg1 = isMoon ? '#1E293B' : '#7C2D12';
+      const bg2 = isMoon ? '#090E1A' : '#431407';
+      const accent = isMoon ? '#38BDF8' : '#FB923C';
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+        <defs><radialGradient id="g" cx="45%" cy="45%"><stop offset="0%" stop-color="${bg1}"/><stop offset="100%" stop-color="${bg2}"/></radialGradient></defs>
+        <rect width="256" height="256" fill="url(#g)"/>
+        <circle cx="96" cy="112" r="46" fill="none" stroke="${accent}" stroke-opacity="0.38" stroke-width="2"/>
+        <circle cx="174" cy="168" r="28" fill="none" stroke="${accent}" stroke-opacity="0.3" stroke-width="2"/>
+        <text x="128" y="236" text-anchor="middle" fill="#E2E8F0" font-family="monospace" font-size="11">${planet.toUpperCase()} TREK ARCHIVE · Z${z}</text>
+      </svg>`;
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Cache-Control', 'public, max-age=600');
+      return res.status(200).send(svg);
+    };
+
+    try {
+      const upstream = await fetch(upstreamUrl, { signal: AbortSignal.timeout(4500) });
+      if (!upstream.ok) {
+        return sendFallbackTrekSvg();
+      }
+      const arr = await upstream.arrayBuffer();
+      const buf = Buffer.from(arr);
+      const contentType = upstream.headers.get('content-type') || 'image/jpeg';
+      if (trekTileByteCache.size > 160) trekTileByteCache.clear();
+      trekTileByteCache.set(cacheKey, {
+        expiresAt: Date.now() + 60 * 60 * 1000,
+        buf,
+        contentType,
+      });
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.send(buf);
+    } catch {
+      return sendFallbackTrekSvg();
+    }
+  });
+
+  app.get('/api/nasa/mars-trek-gallery', async (req, res) => {
+    const siteId = req.query.siteId === 'moon' ? 'moon' : 'mars';
+    const cacheKey = `trek-gallery:${siteId}`;
+    const cached = getCachedNasa(cacheKey);
+    if (cached) return res.json(cached);
+
+    const searchQuery =
+      siteId === 'moon'
+        ? 'shackleton crater lunar south pole LRO'
+        : 'jezero crater perseverance mars orbital delta';
+
+    let nasaImagesSlides: Array<{
+      id: string;
+      title: string;
+      zoneLabel: string;
+      coordinates: string;
+      elevationLabel: string;
+      instrument: string;
+      description: string;
+      imageUrl: string;
+      sourceTag: string;
+    }> = [];
+    let liveNasaImages = false;
+
+    try {
+      const imgRes = await fetch(
+        `https://images-api.nasa.gov/search?q=${encodeURIComponent(
+          searchQuery
+        )}&media_type=image&page_size=6`,
+        { signal: AbortSignal.timeout(4500) }
+      );
+      if (imgRes.ok) {
+        const imgJson = await imgRes.json();
+        const items = Array.isArray(imgJson?.collection?.items) ? imgJson.collection.items : [];
+        nasaImagesSlides = items
+          .slice(0, 4)
+          .map((item: Record<string, unknown>, idx: number) => {
+            const meta = ((item.data as Array<Record<string, unknown>> | undefined) || [])[0] || {};
+            const link = ((item.links as Array<Record<string, unknown>> | undefined) || [])[0] || {};
+            const href = String(link.href || '');
+            return {
+              id: `nasa-live-${siteId}-${idx}`,
+              title: String(meta.title || 'NASA Landing Zone Reconnaissance').slice(0, 88),
+              zoneLabel:
+                siteId === 'moon'
+                  ? 'Shackleton Crater Rim · Artemis South Pole'
+                  : 'Jezero Crater Delta · Outpost Landing Zone',
+              coordinates: siteId === 'moon' ? '89.9° S, 0.0° E' : '18.38° N, 77.58° E',
+              elevationLabel: siteId === 'moon' ? '-4,200 m Crater Floor / +1,800 m Rim' : '-2,560 m Delta Basin',
+              instrument: String(meta.center || 'NASA JPL / GSFC Archive'),
+              description: String(
+                meta.description ||
+                  'Official NASA orbital and surface reconnaissance imagery of your landing zone.'
+              )
+                .replace(/\s+/g, ' ')
+                .slice(0, 220),
+              imageUrl: href,
+              sourceTag: 'NASA Trek & Images API',
+            };
+          })
+          .filter((s: { imageUrl: string }) => s.imageUrl.startsWith('https://'));
+        liveNasaImages = nasaImagesSlides.length > 0;
+      }
+    } catch {
+      // Continue with Trek WMTS high-res orbital tiles + curated assets
+    }
+
+    // Probe Trek WMTS Capabilities availability to report live Trek status cleanly
+    let liveTrekStatus = false;
+    try {
+      const probe = await fetch(
+        siteId === 'moon'
+          ? 'https://trek.nasa.gov/tiles/Moon/EQ/Lunar_LRO_LROC-WAC_Mosaic_global_100m_June2013/1.0.0/WMTSCapabilities.xml'
+          : 'https://trek.nasa.gov/tiles/Mars/EQ/Mars_Viking_MDIM21_ClrMosaic_global_232m/1.0.0/WMTSCapabilities.xml',
+        { method: 'HEAD', signal: AbortSignal.timeout(3500) }
+      );
+      liveTrekStatus = probe.ok;
+    } catch {
+      liveTrekStatus = false;
+    }
+
+    const trekLayerSlides =
+      siteId === 'moon'
+        ? [
+            {
+              id: 'trek-moon-wac-rim',
+              title: 'Lunar Reconnaissance Orbiter · South Pole Mosaic',
+              zoneLabel: 'Shackleton Crater Rim (Artemis Landing Zone)',
+              coordinates: '89.5° S, 0.0° E',
+              elevationLabel: '+1,800 m Sunlit Rim',
+              instrument: 'NASA Moon Trek · LRO WAC 100m/px',
+              description:
+                'High-resolution orbital tile showing bright sunlit peaks around Shackleton Crater where solar arrays capture nearly continuous sunlight.',
+              imageUrl:
+                '/api/nasa/trek-tile?planet=Moon&layer=Lunar_LRO_LROC-WAC_Mosaic_global_100m_June2013&z=2&row=3&col=4',
+              sourceTag: 'NASA Moon Trek WMTS',
+            },
+            {
+              id: 'trek-moon-lola-elev',
+              title: 'LOLA Laser Altimeter Elevation & Ice Shadows',
+              zoneLabel: 'Permanent Shadowed Ice Crater Floor',
+              coordinates: '88.2° S, 18.0° E',
+              elevationLabel: '-4,200 m Ice Deposit Basin',
+              instrument: 'NASA Moon Trek · LRO LOLA Shaded Relief',
+              description:
+                'Laser elevation scan pinpointing frozen water-ice traps inside shadowed craters used for EVA drilling and Electrolyzer O2.',
+              imageUrl:
+                '/api/nasa/trek-tile?planet=Moon&layer=Lunar_LRO_LOLA_ClrShade_Global_128ppd_v04&z=2&row=3&col=4',
+              sourceTag: 'NASA Moon Trek WMTS',
+            },
+          ]
+        : [
+            {
+              id: 'trek-mars-jezero-viking',
+              title: 'Jezero Crater Orbital Mosaic · Outpost Alpha Sector',
+              zoneLabel: 'Jezero Crater Delta (Your Chosen Landing Zone)',
+              coordinates: '18.38° N, 77.58° E',
+              elevationLabel: '-2,560 m Ancient Lakebed',
+              instrument: 'NASA Mars Trek · Viking MDIM 2.1 (232m/px)',
+              description:
+                'Authentic Mars Trek true-color orbital imagery of Isidis Planitia & Jezero Crater rim where Perseverance & Ingenuity landed.',
+              imageUrl:
+                '/api/nasa/trek-tile?planet=Mars&layer=Mars_Viking_MDIM21_ClrMosaic_global_232m&z=3&row=3&col=11',
+              sourceTag: 'NASA Mars Trek WMTS',
+            },
+            {
+              id: 'trek-mars-jezero-mola',
+              title: 'Jezero & Syrtis Major MOLA Laser Elevation',
+              zoneLabel: 'Jezero Basin Watershed & Terrain Slope',
+              coordinates: '18.38° N, 77.58° E',
+              elevationLabel: '-2,560 m Delta Terrace',
+              instrument: 'NASA Mars Trek · MGS MOLA ClrShade (463m/px)',
+              description:
+                'Elevation contour scan showing the river inflow channel feeding Jezero Lake—ideal flat terrain for solar farms & Bio-Dome modules.',
+              imageUrl:
+                '/api/nasa/trek-tile?planet=Mars&layer=Mars_MGS_MOLA_ClrShade_merge_global_463m&z=3&row=3&col=11',
+              sourceTag: 'NASA Mars Trek WMTS',
+            },
+            {
+              id: 'trek-mars-gale-crater',
+              title: 'Gale Crater & Mount Sharp Reconnaissance Sector',
+              zoneLabel: 'Curiosity RAD Dosimetry Reference Site',
+              coordinates: '5.4° S, 137.8° E',
+              elevationLabel: '-4,500 m Crater Floor',
+              instrument: 'NASA Mars Trek · Viking Color Mosaic',
+              description:
+                'Orbital mosaic over Gale Crater where NASA Curiosity RAD instruments measured the real 0.64 mSv/sol baseline dose modeled in AstroBase.',
+              imageUrl:
+                '/api/nasa/trek-tile?planet=Mars&layer=Mars_Viking_MDIM21_ClrMosaic_global_232m&z=3&row=4&col=14',
+              sourceTag: 'NASA Mars Trek WMTS',
+            },
+          ];
+
+    const payload = {
+      status: liveTrekStatus || liveNasaImages ? 'live' : 'archive',
+      siteId,
+      slides: [...trekLayerSlides, ...nasaImagesSlides].slice(0, 6),
+    };
+    setCachedNasa(cacheKey, payload, 20 * 60 * 1000);
+    return res.json(payload);
   });
 
   // Vite middleware in development, static dist in production

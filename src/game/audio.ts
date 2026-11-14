@@ -154,6 +154,41 @@ class SpaceAudioEngine {
     });
   }
 
+  public playWallEChirp(mood: 'happy' | 'curious' | 'love' = 'happy'): void {
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+    const notes =
+      mood === 'love'
+        ? [
+            { f1: 540, f2: 740, dur: 0.14, delay: 0 },
+            { f1: 740, f2: 960, dur: 0.18, delay: 0.15 },
+          ]
+        : mood === 'curious'
+        ? [
+            { f1: 420, f2: 640, dur: 0.16, delay: 0 },
+            { f1: 620, f2: 780, dur: 0.12, delay: 0.17 },
+          ]
+        : [
+            { f1: 580, f2: 720, dur: 0.1, delay: 0 },
+            { f1: 720, f2: 880, dur: 0.12, delay: 0.11 },
+            { f1: 680, f2: 940, dur: 0.14, delay: 0.24 },
+          ];
+    notes.forEach((n) => {
+      const now = ctx.currentTime + n.delay;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(n.f1, now);
+      osc.frequency.exponentialRampToValueAtTime(n.f2, now + n.dur);
+      gain.gain.setValueAtTime(0.085, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + n.dur + 0.02);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + n.dur + 0.03);
+    });
+  }
+
   private midiToFreq(midi: number): number {
     return 440 * Math.pow(2, (midi - 69) / 12);
   }

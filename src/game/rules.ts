@@ -3,15 +3,18 @@ import {
   MISSION_SITES,
   MissionSiteId,
   NasaDonkiEvent,
+  OutpostMapVariant,
 } from './nasaData';
 
 export type RoomId =
   | 'power'
   | 'lifesupport'
   | 'hydroponics'
+  | 'foodlab'
   | 'shield'
   | 'eva'
-  | 'comms';
+  | 'comms'
+  | 'academy';
 
 export interface OutpostRoom {
   id: RoomId;
@@ -29,39 +32,70 @@ export interface OutpostRoom {
   consoleY: number;
 }
 
-export const OUTPOST_WORLD_W = 1560;
-export const OUTPOST_WORLD_H = 900;
+export const OUTPOST_WORLD_W = 2280;
+export const OUTPOST_WORLD_H = 1320;
+
+export const MESS_LOUNGE_ZONE = {
+  id: 'mess_lounge',
+  name: 'Crew Mess Cafe & Rest Lounge',
+  x: 1615,
+  y: 685,
+  w: 540,
+  h: 310,
+  galleyBar: { x: 1712, y: 748 },
+  diningTable: { x: 1825, y: 832 },
+  danceFloor: { x: 2002, y: 742, w: 132, h: 124 },
+  restPods: [
+    { x: 1705, y: 946, label: 'Pod Alpha' },
+    { x: 1882, y: 946, label: 'Pod Beta' },
+  ],
+  diningSeats: [
+    { x: 1744, y: 804, facing: 1 },
+    { x: 1906, y: 804, facing: -1 },
+    { x: 1744, y: 858, facing: 1 },
+    { x: 1906, y: 858, facing: -1 },
+  ],
+} as const;
+
+export const FUTURE_EXPANSION_PLOT = {
+  id: 'future_expansion',
+  label: 'SECTOR B · FUTURE FOOD & HABITAT EXPANSION WING',
+  x: 1615,
+  y: 1045,
+  w: 540,
+  h: 190,
+} as const;
 
 export const OUTPOST_ROOMS: OutpostRoom[] = [
   {
     id: 'power',
     name: 'Reactor & Solar Grid',
-    shortLabel: 'Power Grid',
+    shortLabel: 'Power',
     kidRole: 'Plug & split electricity between rooms!',
     nasaSystemName: 'Kilopower Fission + Solar Array',
     x: 95,
-    y: 110,
+    y: 120,
     w: 350,
     h: 255,
     color: '#1E293B',
     accentColor: '#F59E0B',
     consoleX: 270,
-    consoleY: 225,
+    consoleY: 235,
   },
   {
     id: 'lifesupport',
     name: 'O2 Electrolyzer Bay',
-    shortLabel: 'Life Support',
+    shortLabel: 'O2 Bay',
     kidRole: 'Clean CO2 filters & make breathable air!',
     nasaSystemName: 'NASA ECLSS Water Electrolyzer',
-    x: 605,
-    y: 110,
+    x: 615,
+    y: 120,
     w: 350,
     h: 255,
     color: '#1E293B',
     accentColor: '#38BDF8',
-    consoleX: 780,
-    consoleY: 225,
+    consoleX: 790,
+    consoleY: 235,
   },
   {
     id: 'hydroponics',
@@ -69,59 +103,89 @@ export const OUTPOST_ROOMS: OutpostRoom[] = [
     shortLabel: 'Bio-Dome',
     kidRole: 'Tune Red/Blue LEDs & harvest space crops!',
     nasaSystemName: 'NASA OSDR (OSD-379) Veggie Chamber',
-    x: 1115,
-    y: 110,
+    x: 1135,
+    y: 120,
     w: 350,
     h: 255,
     color: '#1E293B',
     accentColor: '#10B981',
-    consoleX: 1290,
-    consoleY: 225,
+    consoleX: 1310,
+    consoleY: 235,
+  },
+  {
+    id: 'foodlab',
+    name: 'Space Food Lab & Kitchen',
+    shortLabel: 'Food Lab',
+    kidRole: 'Simulate CSA crop nutrition, cook & feed crew!',
+    nasaSystemName: 'CSA Moon-to-Arctic Food Lab & Galley',
+    x: 1655,
+    y: 120,
+    w: 375,
+    h: 255,
+    color: '#1E293B',
+    accentColor: '#FB7185',
+    consoleX: 1842,
+    consoleY: 235,
   },
   {
     id: 'shield',
     name: 'Radiation Shield Vault',
-    shortLabel: 'Shield Vault',
+    shortLabel: 'Shields',
     kidRole: 'Block NASA DONKI solar flares with water walls!',
     nasaSystemName: 'DONKI Storm Shelter + Water Shield',
     x: 95,
-    y: 535,
+    y: 695,
     w: 350,
     h: 255,
     color: '#1E293B',
     accentColor: '#A855F7',
     consoleX: 270,
-    consoleY: 645,
+    consoleY: 805,
   },
   {
     id: 'eva',
     name: 'Rover & EVA Airlock',
-    shortLabel: 'EVA Airlock',
+    shortLabel: 'EVA',
     kidRole: 'Wipe solar dust & drill ice cores outside!',
     nasaSystemName: 'Artemis / MEDA Surface Airlock',
-    x: 605,
-    y: 535,
+    x: 615,
+    y: 695,
     w: 350,
     h: 255,
     color: '#1E293B',
     accentColor: '#F97316',
-    consoleX: 780,
-    consoleY: 645,
+    consoleX: 790,
+    consoleY: 805,
   },
   {
     id: 'comms',
     name: 'Comms & Sound Deck',
-    shortLabel: 'Comms & Music',
+    shortLabel: 'Comms',
     kidRole: 'Beam science to Earth, transcribe voice & play music!',
     nasaSystemName: 'Deep Space Network + Crew Jukebox',
-    x: 1115,
-    y: 535,
+    x: 1135,
+    y: 695,
     w: 350,
     h: 255,
     color: '#1E293B',
     accentColor: '#EC4899',
-    consoleX: 1290,
-    consoleY: 645,
+    consoleX: 1310,
+    consoleY: 805,
+  },
+  {
+    id: 'academy',
+    name: 'Academy Station',
+    shortLabel: 'Academy',
+    kidRole: 'Learn Mission Trainer lessons & play quiz games for marks + supplies!',
+    nasaSystemName: 'Junior Astronaut Learning & Quiz Center',
+    x: 95,
+    y: 998,
+    w: 350,
+    h: 246,
+    color: '#1E293B',
+    accentColor: '#FACC15',
+    consoleX: 270,
+    consoleY: 1106,
   },
 ];
 
@@ -287,8 +351,27 @@ export const BUILTIN_DYNAMIC_EVENTS: DynamicMissionEvent[] = [
   },
 ];
 
+export type CropIngredientId =
+  | 'mizuna'
+  | 'wheat'
+  | 'radish'
+  | 'berries'
+  | 'microgreens'
+  | 'spirulina';
+
+export interface CropPantryInventory {
+  mizuna: number;
+  wheat: number;
+  radish: number;
+  berries: number;
+  microgreens: number;
+  spirulina: number;
+  h2oDrops: number;
+}
+
 export interface GameStateSnapshot {
   siteId: MissionSiteId;
+  mapVariant: OutpostMapVariant;
   sol: number; // 1 to 7
   maxSols: number;
   oxygen: number; // 0 to 100 (%)
@@ -301,6 +384,16 @@ export interface GameStateSnapshot {
   powerAllocation: PowerAllocation;
   completedTasksToday: RoomId[];
   dailyEventResolved: boolean;
+  pantry: CropPantryInventory;
+  mealsCookedTotal: number;
+  cropsHarvestedTotal: number;
+  wallEScansCount: number;
+}
+
+export const SCIENCE_BOT_SCAN_TARGET = 10;
+
+export function hasScienceBotBadge(wallEScansCount: number): boolean {
+  return wallEScansCount >= SCIENCE_BOT_SCAN_TARGET;
 }
 
 export interface SolProjection {
@@ -459,10 +552,26 @@ export function checkMissionOutcome(state: GameStateSnapshot): {
   return { status: 'playing', reason: 'Outpost Nominal' };
 }
 
-export function createInitialGameState(siteId: MissionSiteId = 'mars'): GameStateSnapshot {
+export function createInitialPantry(): CropPantryInventory {
+  return {
+    mizuna: 2,
+    wheat: 2,
+    radish: 2,
+    berries: 2,
+    microgreens: 2,
+    spirulina: 1,
+    h2oDrops: 3,
+  };
+}
+
+export function createInitialGameState(
+  siteId: MissionSiteId = 'mars',
+  mapVariant: OutpostMapVariant = 'classic'
+): GameStateSnapshot {
   const availablePowerKw = computeAvailablePowerKw(siteId, 1, 0);
   return {
     siteId,
+    mapVariant,
     sol: 1,
     maxSols: 7,
     oxygen: 86,
@@ -480,6 +589,10 @@ export function createInitialGameState(siteId: MissionSiteId = 'mars'): GameStat
     },
     completedTasksToday: [],
     dailyEventResolved: false,
+    pantry: createInitialPantry(),
+    mealsCookedTotal: 0,
+    cropsHarvestedTotal: 0,
+    wallEScansCount: 0,
   };
 }
 
@@ -516,7 +629,7 @@ export function formatMilestonesSummary(milestones: DailyMilestone[]): string {
   return milestones
     .map((m) => {
       const cls = m.donkiClass.split(' ')[0];
-      const base = `S${m.sol}(${cls}): O2 ${m.oxygen}% Food ${m.food}% Rad ${m.radiationMsv}mSv ${m.tasksCompleted.length}/6`;
+      const base = `S${m.sol}(${cls}): O2 ${m.oxygen}% Food ${m.food}% Rad ${m.radiationMsv}mSv ${m.tasksCompleted.length}/${OUTPOST_ROOMS.length}`;
       return m.eventDecision ? `${base} [${m.eventDecision.slice(0, 26)}]` : base;
     })
     .join(' | ')
@@ -667,6 +780,507 @@ export function getAdaptiveMusicContextKey(
   }
   return `${severity}:${roomId || 'corridor'}`;
 }
+
+export interface DailyLogEntry {
+  id: string;
+  sol: number;
+  siteId: MissionSiteId;
+  donkiClass: string;
+  oxygen: number;
+  food: number;
+  radiationMsv: number;
+  scienceScore: number;
+  tasksCompletedCount: number;
+  note: string;
+  createdAtIso: string;
+}
+
+export function createDailyLogEntry(params: {
+  sol: number;
+  siteId: MissionSiteId;
+  donkiClass: string;
+  oxygen: number;
+  food: number;
+  radiationMsv: number;
+  scienceScore: number;
+  tasksCompletedCount: number;
+  note: string;
+  createdAtIso?: string;
+}): DailyLogEntry {
+  const cleanNote = params.note.trim().slice(0, 280);
+  const clampedSol = Math.max(1, Math.min(7, Math.round(params.sol)));
+  return {
+    id: `sol-${clampedSol}-${params.siteId}-${Date.now()}`,
+    sol: clampedSol,
+    siteId: params.siteId,
+    donkiClass: params.donkiClass,
+    oxygen: Math.round(params.oxygen),
+    food: Math.round(params.food),
+    radiationMsv: Number(params.radiationMsv.toFixed(1)),
+    scienceScore: Math.round(params.scienceScore),
+    tasksCompletedCount: Math.max(0, Math.min(OUTPOST_ROOMS.length, Math.round(params.tasksCompletedCount))),
+    note: cleanNote,
+    createdAtIso: params.createdAtIso || new Date().toISOString(),
+  };
+}
+
+export function upsertDailyLog(
+  entries: DailyLogEntry[],
+  newEntry: DailyLogEntry,
+  maxEntries: number = 28
+): DailyLogEntry[] {
+  if (!newEntry.note.trim()) return entries;
+  const filtered = entries.filter(
+    (e) => !(e.sol === newEntry.sol && e.siteId === newEntry.siteId && e.createdAtIso.slice(0, 10) === newEntry.createdAtIso.slice(0, 10))
+  );
+  return [newEntry, ...filtered].slice(0, maxEntries);
+}
+
+export function formatDailyLogsForSummary(entries: DailyLogEntry[]): string {
+  if (entries.length === 0) return '';
+  return entries
+    .slice(0, 7)
+    .map((e) => `Sol ${e.sol}: "${e.note}"`)
+    .join(' | ')
+    .slice(0, 400);
+}
+
+export interface SpacePlateServings {
+  protein: number; // ~360 kcal/serving
+  greens: number;  // ~110 kcal/serving (fresh hydroponic microgreens/radish)
+  grains: number;  // ~310 kcal/serving (dwarf wheat / oats)
+  fruit: number;   // ~180 kcal/serving (berries / dehydrated fruit)
+}
+
+export interface SpacePlateNutritionResult {
+  totalKcal: number;
+  targetMinKcal: number;
+  targetMaxKcal: number;
+  inHealthyRange: boolean;
+  vitaminCScore: number; // 0..100
+  freshFoodMoodBoost: number; // 0..100
+  feedback: string;
+}
+
+export function calculateSpacePlateNutrition(
+  servings: SpacePlateServings
+): SpacePlateNutritionResult {
+  const protein = Math.max(0, Math.min(6, Math.round(servings.protein)));
+  const greens = Math.max(0, Math.min(6, Math.round(servings.greens)));
+  const grains = Math.max(0, Math.min(6, Math.round(servings.grains)));
+  const fruit = Math.max(0, Math.min(6, Math.round(servings.fruit)));
+
+  const totalKcal = protein * 360 + greens * 110 + grains * 310 + fruit * 180;
+  const targetMinKcal = 1900;
+  const targetMaxKcal = 3200;
+  const inHealthyRange =
+    totalKcal >= targetMinKcal &&
+    totalKcal <= targetMaxKcal &&
+    greens >= 1 &&
+    protein >= 1;
+
+  const vitaminCScore = Math.min(100, greens * 28 + fruit * 25);
+  const freshFoodMoodBoost = Math.min(100, greens * 30 + fruit * 20 + (protein >= 2 ? 15 : 0));
+
+  let feedback =
+    'Great CSA Astro-Plate! You hit the 1,900–3,200 kcal astronaut energy range with fresh hydroponic vitamins for crew mood.';
+  if (totalKcal < targetMinKcal) {
+    feedback =
+      'Too low in energy! CSA astronauts need 1,900–3,200 kcal/day to repair muscles and stay sharp on EVA.';
+  } else if (totalKcal > targetMaxKcal) {
+    feedback =
+      'Over packed calories (>3,200 kcal)! Balance lighter fresh Bio-Dome microgreens to save pantry cargo mass.';
+  } else if (greens < 1 || protein < 1) {
+    feedback =
+      'Add at least 1 Bio-Dome Greens + 1 Protein serving so your crew gets bone-saving protein and Vitamin C!';
+  }
+
+  return {
+    totalKcal,
+    targetMinKcal,
+    targetMaxKcal,
+    inHealthyRange,
+    vitaminCScore,
+    freshFoodMoodBoost,
+    feedback,
+  };
+}
+
+export interface CsaHydroponicCrop {
+  id: CropIngredientId;
+  name: string;
+  emoji: string;
+  kcalPerServing: number;
+  proteinG: number;
+  vitaminCPct: number;
+  boneMineralPct: number;
+  waterEfficiencyPct: number;
+  moodBoost: number;
+  growthDays: number;
+  color: string;
+  csaFact: string;
+}
+
+export const CSA_HYDROPONIC_CROPS: CsaHydroponicCrop[] = [
+  {
+    id: 'mizuna',
+    name: 'Mizuna Mustard Greens',
+    emoji: '🥬',
+    kcalPerServing: 120,
+    proteinG: 5,
+    vitaminCPct: 32,
+    boneMineralPct: 16,
+    waterEfficiencyPct: 95,
+    moodBoost: 18,
+    growthDays: 28,
+    color: '#10B981',
+    csaFact: 'Grown on ISS & CSA Arctic labs—packed with crisp Vitamin K & Vitamin C for bones!',
+  },
+  {
+    id: 'wheat',
+    name: 'Dwarf Space Wheat',
+    emoji: '🌾',
+    kcalPerServing: 360,
+    proteinG: 12,
+    vitaminCPct: 4,
+    boneMineralPct: 14,
+    waterEfficiencyPct: 86,
+    moodBoost: 10,
+    growthDays: 65,
+    color: '#F59E0B',
+    csaFact: 'Compact 35cm stalks save Moon cabin height while baking warm high-energy flatbread!',
+  },
+  {
+    id: 'radish',
+    name: 'Astro Cherry Radish',
+    emoji: '🌱',
+    kcalPerServing: 140,
+    proteinG: 4,
+    vitaminCPct: 26,
+    boneMineralPct: 12,
+    waterEfficiencyPct: 94,
+    moodBoost: 15,
+    growthDays: 27,
+    color: '#FB7185',
+    csaFact: 'Harvested on ISS Plant Habitat-02! Gives astronauts crunch that wakes up taste buds in zero-G.',
+  },
+  {
+    id: 'berries',
+    name: 'Day-Neutral Strawberries',
+    emoji: '🍓',
+    kcalPerServing: 210,
+    proteinG: 3,
+    vitaminCPct: 42,
+    boneMineralPct: 10,
+    waterEfficiencyPct: 88,
+    moodBoost: 24,
+    growthDays: 45,
+    color: '#F43F5E',
+    csaFact: 'CSA northern greenhouse favorite! Antioxidants help shield astronaut cells from solar radiation.',
+  },
+  {
+    id: 'microgreens',
+    name: 'Arctic Kale Microgreens',
+    emoji: '🥗',
+    kcalPerServing: 150,
+    proteinG: 6,
+    vitaminCPct: 35,
+    boneMineralPct: 24,
+    waterEfficiencyPct: 97,
+    moodBoost: 16,
+    growthDays: 14,
+    color: '#34D399',
+    csaFact: '4x more vitamins per leaf than mature greens—perfect for Moon habitats and Nunavut winters!',
+  },
+  {
+    id: 'spirulina',
+    name: 'Bio-Reactor Spirulina',
+    emoji: '🫧',
+    kcalPerServing: 340,
+    proteinG: 22,
+    vitaminCPct: 12,
+    boneMineralPct: 26,
+    waterEfficiencyPct: 99,
+    moodBoost: 8,
+    growthDays: 7,
+    color: '#38BDF8',
+    csaFact: 'Micro-algae superfood tested by CSA & ESA: recycles CO2 into pure O2 AND muscle-saving protein!',
+  },
+];
+
+export type CropLabSelectionMap = Record<CropIngredientId, number>;
+
+export interface CsaCropLabSimulationResult {
+  totalKcal: number;
+  proteinGrams: number;
+  proteinScore: number; // 0..100
+  vitaminCScore: number; // 0..100
+  boneMineralScore: number; // 0..100
+  hydrationPct: number; // 0..100
+  crewMoodBoost: number; // 0..100
+  astronautHealthState: 'Peak Energy' | 'Needs Fuel' | 'Vitamin Gap' | 'Cargo Heavy';
+  inHealthyRange: boolean;
+  summary: string;
+}
+
+export function calculateCsaCropLabSimulation(
+  selections: CropLabSelectionMap
+): CsaCropLabSimulationResult {
+  let totalKcal = 0;
+  let proteinGrams = 0;
+  let vitaminC = 0;
+  let boneMinerals = 0;
+  let mood = 0;
+  let weightedWaterEff = 0;
+  let totalServings = 0;
+
+  for (const crop of CSA_HYDROPONIC_CROPS) {
+    const qty = Math.max(0, Math.min(6, Math.round(selections[crop.id] || 0)));
+    if (qty === 0) continue;
+    totalServings += qty;
+    totalKcal += qty * crop.kcalPerServing;
+    proteinGrams += qty * crop.proteinG;
+    vitaminC += qty * crop.vitaminCPct;
+    boneMinerals += qty * crop.boneMineralPct;
+    mood += qty * crop.moodBoost;
+    weightedWaterEff += qty * crop.waterEfficiencyPct;
+  }
+
+  const proteinScore = Math.min(100, Math.round((proteinGrams / 75) * 100));
+  const vitaminCScore = Math.min(100, Math.round(vitaminC));
+  const boneMineralScore = Math.min(100, Math.round(boneMinerals));
+  const hydrationPct =
+    totalServings > 0 ? Math.min(100, Math.round(weightedWaterEff / totalServings)) : 0;
+  const crewMoodBoost = Math.min(100, Math.round(mood));
+
+  let astronautHealthState: CsaCropLabSimulationResult['astronautHealthState'] = 'Peak Energy';
+  let summary =
+    'Peak CSA Astronaut Nutrition! Balanced calories (1,900–3,200 kcal), bone minerals, muscle protein, and fresh Vitamin C!';
+
+  if (totalKcal < 1900) {
+    astronautHealthState = 'Needs Fuel';
+    summary =
+      'Low Calorie Energy (<1,900 kcal): Add Dwarf Wheat or Spirulina so astronauts have EVA stamina!';
+  } else if (totalKcal > 3200) {
+    astronautHealthState = 'Cargo Heavy';
+    summary =
+      'Over Calorie Target (>3,200 kcal): Swap heavy grains for lighter Mizuna greens & Radishes to save greenhouse water.';
+  } else if (vitaminCScore < 65 || proteinScore < 55) {
+    astronautHealthState = 'Vitamin Gap';
+    summary =
+      'Calories look good, but balance your nutrients! Add Berries/Microgreens for Vitamin C or Spirulina for muscle protein.';
+  }
+
+  const inHealthyRange = astronautHealthState === 'Peak Energy';
+
+  return {
+    totalKcal,
+    proteinGrams,
+    proteinScore,
+    vitaminCScore,
+    boneMineralScore,
+    hydrationPct,
+    crewMoodBoost,
+    astronautHealthState,
+    inHealthyRange,
+    summary,
+  };
+}
+
+export interface SpaceKitchenRecipe {
+  id: string;
+  name: string;
+  emoji: string;
+  tagline: string;
+  csaOriginNote: string;
+  cost: Partial<CropPantryInventory>;
+  rewards: {
+    food: number;
+    oxygen: number;
+    science: number;
+  };
+}
+
+export const SPACE_RECIPES: SpaceKitchenRecipe[] = [
+  {
+    id: 'taco-wrap',
+    name: 'Orbital Crunchy Taco Wrap',
+    emoji: '🌮',
+    tagline: 'Crispy Bio-Dome tortilla packed with fresh Mizuna & Astro Radishes!',
+    csaOriginNote: 'Inspired by ISS Expedition astronauts eating homegrown red & green salad wraps.',
+    cost: { mizuna: 1, wheat: 1, radish: 1, h2oDrops: 1 },
+    rewards: { food: 12, oxygen: 3, science: 25 },
+  },
+  {
+    id: 'berry-bowl',
+    name: 'Jezero Berry Energy Bowl',
+    emoji: '🥣',
+    tagline: 'Antioxidant strawberries & kale microgreens to protect against solar radiation!',
+    csaOriginNote: 'CSA nutritionists pair high Vitamin C fruit with Arctic microgreens.',
+    cost: { berries: 1, microgreens: 1, h2oDrops: 1 },
+    rewards: { food: 10, oxygen: 4, science: 25 },
+  },
+  {
+    id: 'flatbread',
+    name: 'Commander’s Bio-Dome Flatbread',
+    emoji: '🫓',
+    tagline: 'Warm protein-boosted dwarf wheat loaf with Spirulina pesto.',
+    csaOriginNote: 'Uses CSA Deep Space Food Challenge Spirulina protein + compact wheat.',
+    cost: { wheat: 1, mizuna: 1, spirulina: 1, h2oDrops: 1 },
+    rewards: { food: 14, oxygen: 4, science: 30 },
+  },
+  {
+    id: 'arctic-ramen',
+    name: 'Moon-to-Arctic Bio-Soup Cup',
+    emoji: '🍲',
+    tagline: 'Steaming broth infused with crispy radishes, microgreens & protein algae!',
+    csaOriginNote: 'Demonstrates closed-loop rehydration using recycled ECLSS Bay water.',
+    cost: { radish: 1, microgreens: 1, spirulina: 1, h2oDrops: 2 },
+    rewards: { food: 16, oxygen: 5, science: 35 },
+  },
+];
+
+export function canCookSpaceRecipe(
+  pantry: CropPantryInventory,
+  recipe: SpaceKitchenRecipe
+): boolean {
+  for (const [key, needed] of Object.entries(recipe.cost)) {
+    const k = key as keyof CropPantryInventory;
+    if ((pantry[k] || 0) < (needed || 0)) return false;
+  }
+  return true;
+}
+
+export function consumeRecipeIngredients(
+  pantry: CropPantryInventory,
+  recipe: SpaceKitchenRecipe
+): CropPantryInventory {
+  const next = { ...pantry };
+  for (const [key, needed] of Object.entries(recipe.cost)) {
+    const k = key as keyof CropPantryInventory;
+    next[k] = Math.max(0, (next[k] || 0) - (needed || 0));
+  }
+  return next;
+}
+
+export interface NutritionExplorerHealthResult {
+  healthMeterScore: number; // 0..100 real-time base health meter
+  kcalCoveragePct: number; // 0..100
+  vitaminImmunityPct: number; // 0..100
+  boneMusclePct: number; // 0..100
+  hydrationRecyclePct: number; // 0..100
+  harvestedUnitsCount: number;
+  processedMealsCount: number;
+  pantryStockUnits: number;
+  statusLabel: 'Peak Base Health' | 'Steady Fuel' | 'Grow & Cook Needed';
+  nextActionTip: string;
+}
+
+/**
+ * Computes the live 'Nutrition Explorer' Health Meter inside the Space Food Lab
+ * from actual crops harvested & stored/processed in the outpost plus base Food & O2 levels.
+ */
+export function calculateNutritionExplorerHealth(
+  state: GameStateSnapshot
+): NutritionExplorerHealthResult {
+  const pantry = state.pantry;
+  const pantryStockUnits =
+    pantry.mizuna +
+    pantry.wheat +
+    pantry.radish +
+    pantry.berries +
+    pantry.microgreens +
+    pantry.spirulina;
+
+  // Map real pantry stock into CSA crop ratios (scaled so real base harvests + meals lift score cleanly)
+  const dailyEnergyKcal =
+    pantry.wheat * 360 +
+    pantry.spirulina * 340 +
+    pantry.berries * 210 +
+    pantry.microgreens * 150 +
+    pantry.radish * 140 +
+    pantry.mizuna * 120 +
+    state.mealsCookedTotal * 260;
+
+  const kcalCoveragePct = Math.min(100, Math.round((dailyEnergyKcal / 2400) * 100));
+
+  const vitaminImmunityPct = Math.min(
+    100,
+    Math.round(
+      pantry.mizuna * 12 +
+        pantry.radish * 10 +
+        pantry.berries * 18 +
+        pantry.microgreens * 16 +
+        state.mealsCookedTotal * 12
+    )
+  );
+
+  const boneMusclePct = Math.min(
+    100,
+    Math.round(
+      pantry.wheat * 11 +
+        pantry.spirulina * 24 +
+        pantry.microgreens * 12 +
+        pantry.mizuna * 8 +
+        state.mealsCookedTotal * 14
+    )
+  );
+
+  const hydrationRecyclePct = Math.min(
+    100,
+    Math.round(
+      pantry.h2oDrops * 16 +
+        (state.oxygen >= 60 ? 25 : 10) +
+        (state.cropsHarvestedTotal > 0 ? 15 : 0) +
+        state.mealsCookedTotal * 8
+    )
+  );
+
+  const harvestBoost = Math.min(18, state.cropsHarvestedTotal * 2);
+  const processedBoost = Math.min(20, state.mealsCookedTotal * 8);
+  const foodReserveFactor = Math.round(state.food * 0.28);
+
+  const rawMeter =
+    kcalCoveragePct * 0.24 +
+    vitaminImmunityPct * 0.22 +
+    boneMusclePct * 0.2 +
+    hydrationRecyclePct * 0.14 +
+    foodReserveFactor +
+    harvestBoost * 0.55 +
+    processedBoost * 0.65;
+
+  const healthMeterScore = Math.max(8, Math.min(100, Math.round(rawMeter)));
+
+  let statusLabel: NutritionExplorerHealthResult['statusLabel'] = 'Steady Fuel';
+  let nextActionTip =
+    'Harvest crops in Bio-Dome or pick Galley Sprouts, then cook a Space Meal in Astro-Kitchen to max your Health Meter!';
+
+  if (healthMeterScore >= 82) {
+    statusLabel = 'Peak Base Health';
+    nextActionTip =
+      'Outstanding CSA nutrition! Harvested greens & cooked meals give astronauts peak bone density, Vitamin C, and EVA stamina.';
+  } else if (healthMeterScore < 55) {
+    statusLabel = 'Grow & Cook Needed';
+    nextActionTip =
+      'Low base pantry reserves! Visit Hydroponic Bio-Dome to harvest fresh crops or pick Galley Micro-Sprouts & cook a dish.';
+  }
+
+  return {
+    healthMeterScore,
+    kcalCoveragePct,
+    vitaminImmunityPct,
+    boneMusclePct,
+    hydrationRecyclePct,
+    harvestedUnitsCount: state.cropsHarvestedTotal,
+    processedMealsCount: state.mealsCookedTotal,
+    pantryStockUnits,
+    statusLabel,
+    nextActionTip,
+  };
+}
+
+
+
 
 
 

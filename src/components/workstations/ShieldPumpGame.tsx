@@ -188,6 +188,9 @@ export const ShieldPumpGame: React.FC<ShieldPumpGameProps> = ({
             Pump Challenge: Water pressure drains continuously! Mash PUMP H2O rapidly until the
             active tank hits 75%–100%, then hit LOCK VALVE before the 14s storm timer runs out!
           </p>
+          <div className="px-3 py-1.5 rounded-lg bg-purple-950/50 border border-purple-500/30 text-[11px] text-purple-200 font-mono">
+            ☢️ OSDR RadLab Baselines: Earth 0.008 · ISS 0.55 · Mars RAD 0.64 · Moon CRaTER 1.1 mSv/sol
+          </div>
         </div>
       </div>
 

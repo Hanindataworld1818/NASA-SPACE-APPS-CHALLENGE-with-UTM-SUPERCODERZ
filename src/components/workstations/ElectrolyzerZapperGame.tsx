@@ -24,7 +24,10 @@ interface ZapSpark {
 
 interface ElectrolyzerZapperGameProps {
   isAlreadyDone: boolean;
-  onComplete: (deltas: { oxygen?: number; science?: number }, logNote: string) => void;
+  onComplete: (
+    deltas: { oxygen?: number; science?: number; pantryDelta?: { h2oDrops?: number } },
+    logNote: string
+  ) => void;
 }
 
 const TOTAL_BLOBS = 8;
@@ -116,8 +119,8 @@ export const ElectrolyzerZapperGame: React.FC<ElectrolyzerZapperGameProps> = ({
             setGamePhase('completed');
             setCo2Level(0);
             onComplete(
-              { oxygen: 8, science: 20 },
-              'Zapped all 8 drifting CO2 Grime Blobs in the Electrolyzer Bay (+8% O2)'
+              { oxygen: 8, science: 20, pantryDelta: { h2oDrops: 3 } },
+              'Zapped all 8 CO2 Grime Blobs in Electrolyzer Bay (+8% O2, +3 H2O Drops)'
             );
           }
         } else {
@@ -230,8 +233,8 @@ export const ElectrolyzerZapperGame: React.FC<ElectrolyzerZapperGameProps> = ({
                   setGamePhase('completed');
                   setCo2Level(0);
                   onComplete(
-                    { oxygen: 8, science: 20 },
-                    'Zapped all 8 drifting CO2 Grime Blobs in the Electrolyzer Bay (+8% O2)'
+                    { oxygen: 8, science: 20, pantryDelta: { h2oDrops: 3 } },
+                    'Zapped all 8 drifting CO2 Grime Blobs in Electrolyzer Bay (+8% O2, +3 H2O Drops)'
                   );
                 }
               }

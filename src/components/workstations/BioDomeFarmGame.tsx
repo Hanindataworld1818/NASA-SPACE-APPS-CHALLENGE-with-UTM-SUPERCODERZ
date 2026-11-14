@@ -11,7 +11,18 @@ const CROPS = [
 interface BioDomeFarmGameProps {
   isAlreadyDone: boolean;
   onComplete: (
-    deltas: { food?: number; oxygen?: number; science?: number },
+    deltas: {
+      food?: number;
+      oxygen?: number;
+      science?: number;
+      pantryDelta?: {
+        mizuna?: number;
+        wheat?: number;
+        radish?: number;
+        berries?: number;
+        microgreens?: number;
+      };
+    },
     logNote: string
   ) => void;
 }
@@ -117,8 +128,13 @@ export const BioDomeFarmGame: React.FC<BioDomeFarmGameProps> = ({
     if (next.every(Boolean)) {
       setStage('completed');
       onComplete(
-        { food: 9, oxygen: 4, science: 20 },
-        'Planted, Hydrated, and Harvested NASA OSDR-379 Crops (+9% Food, +4% O2)'
+        {
+          food: 9,
+          oxygen: 4,
+          science: 20,
+          pantryDelta: { mizuna: 2, wheat: 2, radish: 2, berries: 1, microgreens: 1 },
+        },
+        'Planted, Hydrated, and Harvested NASA OSDR-379 Crops (+9% Food, +4% O2, +Fresh Kitchen Pantry Crops)'
       );
     }
   };
@@ -242,6 +258,11 @@ export const BioDomeFarmGame: React.FC<BioDomeFarmGameProps> = ({
               'Harvest complete! Bio-Dome produced +9% Food, +4% O2, and +20 Science!'}
             {stage === 'failed' && failReason}
           </p>
+          <div className="px-3 py-1.5 rounded-lg bg-emerald-950/50 border border-emerald-500/30 text-[11px] text-emerald-200">
+            🍁 <strong>CSA Food Lab:</strong> Astronauts need <strong>1,900–3,200 kcal/day</strong>!
+            Growing fresh LED microgreens boosts crew mood &amp; Vitamin C on the Moon, Mars, and
+            remote Arctic towns on Earth.
+          </div>
 
           {/* LED Slider */}
           <div>

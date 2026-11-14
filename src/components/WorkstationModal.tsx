@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
+  CropPantryInventory,
   GameStateSnapshot,
   OUTPOST_ROOMS,
   PowerAllocation,
   RoomId,
+  SpaceKitchenRecipe,
   getDonkiEventForSol,
 } from '../game/rules';
 import { MISSION_SITES } from '../game/nasaData';
@@ -15,9 +17,11 @@ import {
 import { PowerGridGame } from './workstations/PowerGridGame';
 import { ElectrolyzerZapperGame } from './workstations/ElectrolyzerZapperGame';
 import { BioDomeFarmGame } from './workstations/BioDomeFarmGame';
+import { SpaceFoodLabGame } from './workstations/SpaceFoodLabGame';
 import { ShieldPumpGame } from './workstations/ShieldPumpGame';
 import { EvaRoverGame } from './workstations/EvaRoverGame';
 import { CommsDishGame } from './workstations/CommsDishGame';
+import { AcademyStationGame } from './workstations/AcademyStationGame';
 
 interface WorkstationModalProps {
   roomId: RoomId;
@@ -34,8 +38,21 @@ interface WorkstationModalProps {
       radiationMsv?: number;
       science?: number;
       bonusPowerKw?: number;
+      pantryDelta?: Partial<CropPantryInventory>;
     },
     logNote?: string
+  ) => void;
+  onForageStarterSprouts: () => void;
+  onCookAndFeedCrew: (recipe: SpaceKitchenRecipe) => void;
+  onAcademyBonusReward?: (
+    deltas: {
+      oxygen?: number;
+      food?: number;
+      radiationMsv?: number;
+      science?: number;
+      pantryDelta?: Partial<CropPantryInventory>;
+    },
+    toastNote: string
   ) => void;
   onTriggerEndSol: () => void;
 }
@@ -48,6 +65,9 @@ export const WorkstationModal: React.FC<WorkstationModalProps> = ({
   onClose,
   onUpdatePower,
   onCompleteTask,
+  onForageStarterSprouts,
+  onCookAndFeedCrew,
+  onAcademyBonusReward,
   onTriggerEndSol,
 }) => {
   const room = OUTPOST_ROOMS.find((r) => r.id === roomId) || OUTPOST_ROOMS[0];
@@ -372,6 +392,18 @@ export const WorkstationModal: React.FC<WorkstationModalProps> = ({
             />
           )}
 
+          {roomId === 'foodlab' && (
+            <SpaceFoodLabGame
+              gameState={gameState}
+              pantry={gameState.pantry}
+              crewColor={crewColor}
+              mealsCookedTotal={gameState.mealsCookedTotal}
+              isAlreadyDone={isAlreadyDone}
+              onForageStarterSprouts={onForageStarterSprouts}
+              onCookAndFeedCrew={onCookAndFeedCrew}
+            />
+          )}
+
           {roomId === 'shield' && (
             <ShieldPumpGame
               donki={donki}
@@ -387,6 +419,19 @@ export const WorkstationModal: React.FC<WorkstationModalProps> = ({
               crewColor={crewColor}
               isAlreadyDone={isAlreadyDone}
               onComplete={(deltas, note) => onCompleteTask('eva', deltas, note)}
+            />
+          )}
+
+          {roomId === 'academy' && (
+            <AcademyStationGame
+              gameState={gameState}
+              isAlreadyDone={isAlreadyDone}
+              onComplete={(deltas, note) => onCompleteTask('academy', deltas, note)}
+              onBonusReward={(deltas, toastNote) => {
+                if (onAcademyBonusReward) {
+                  onAcademyBonusReward(deltas, toastNote);
+                }
+              }}
             />
           )}
 

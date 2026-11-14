@@ -22,6 +22,7 @@ interface EvaRoverGameProps {
       science?: number;
       oxygen?: number;
       radiationMsv?: number;
+      pantryDelta?: { h2oDrops?: number; spirulina?: number };
     },
     logNote: string
   ) => void;
@@ -240,8 +241,14 @@ export const EvaRoverGame: React.FC<EvaRoverGameProps> = ({
           );
           spaceAudio.playBreakerClick(true);
           onComplete(
-            { bonusPowerKw: 1, science: 25, oxygen: -6, radiationMsv: 2.5 },
-            'Drove EVA Rover & Brushed All Surface Arrays Clean (+1 kW Power, -6% O2, +2.5 mSv)'
+            {
+              bonusPowerKw: 1,
+              science: 25,
+              oxygen: -6,
+              radiationMsv: 2.5,
+              pantryDelta: { h2oDrops: 2, spirulina: 1 },
+            },
+            'Drove EVA Rover, Cleaned Arrays & Drilled Ice Core (+1 kW, +2 H2O Drops, +1 Spirulina)'
           );
         }
 

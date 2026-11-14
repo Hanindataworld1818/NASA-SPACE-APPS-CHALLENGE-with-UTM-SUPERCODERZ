@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   BUILTIN_DYNAMIC_EVENTS,
+  CropPantryInventory,
+  DailyLogEntry,
   DailyMilestone,
   DynamicMissionEvent,
   ForecastIconType,
@@ -8,23 +10,40 @@ import {
   OUTPOST_ROOMS,
   PowerAllocation,
   RoomId,
+  SCIENCE_BOT_SCAN_TARGET,
+  SpaceKitchenRecipe,
   calculateSolOutcome,
   checkMissionOutcome,
   computeAvailablePowerKw,
   computeCrisisSeverity,
+  consumeRecipeIngredients,
+  createDailyLogEntry,
   createDailyMilestone,
   createInitialGameState,
+  formatDailyLogsForSummary,
   formatMilestonesSummary,
   getAdaptiveMusicContextKey,
   getDonkiEventForSol,
   getThreeSolForecast,
+  hasScienceBotBadge,
+  upsertDailyLog,
 } from './game/rules';
-import { MISSION_SITES, MissionSiteId } from './game/nasaData';
-import { OutpostCanvas } from './components/OutpostCanvas';
+import {
+  MISSION_SITES,
+  MissionSiteId,
+  OUTPOST_MAP_DESIGNS,
+  OutpostMapVariant,
+  getOutpostMapDesign,
+} from './game/nasaData';
+import { CADET_EMOTES, CadetEmoteId } from './game/crewAndCamera';
+import { StationScanReport } from './game/wallE';
+import { NearbyCrewInfo, OutpostCanvas, OutpostPropInteraction } from './components/OutpostCanvas';
 import { WorkstationModal } from './components/WorkstationModal';
 import { NasaDataModal } from './components/NasaDataModal';
+import { EducatorYouthGuideModal } from './components/EducatorYouthGuideModal';
 import { DynamicEventModal } from './components/DynamicEventModal';
 import { CustomInstructionsModal } from './components/CustomInstructionsModal';
+import { WallEBuddyCard } from './components/WallEBuddyCard';
 import {
   CustomInstructionsData,
   DEFAULT_CUSTOM_INSTRUCTIONS,
@@ -49,6 +68,8 @@ interface RunEndSnapshot {
   food: number;
   radiationMsv: number;
   tasksCompletedTotal: number;
+  wallEScansCount: number;
+  scienceBotEarned: boolean;
   milestones: DailyMilestone[];
 }
 
@@ -73,6 +94,27 @@ function readLocalLogbook(): SavedLogbookEntry[] {
 function writeLocalLogbook(entries: SavedLogbookEntry[]): void {
   try {
     window.localStorage.setItem(LOCAL_LOGBOOK_KEY, JSON.stringify(entries.slice(0, 12)));
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+const LOCAL_DAILY_LOGS_KEY = 'astrobase_daily_logs_v1';
+
+function readLocalDailyLogs(): DailyLogEntry[] {
+  try {
+    const raw = window.localStorage.getItem(LOCAL_DAILY_LOGS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalDailyLogs(entries: DailyLogEntry[]): void {
+  try {
+    window.localStorage.setItem(LOCAL_DAILY_LOGS_KEY, JSON.stringify(entries.slice(0, 28)));
   } catch {
     // ignore storage quota errors
   }
@@ -143,28 +185,53 @@ function renderForecastWeatherIcon(iconType: ForecastIconType) {
 }
 
 export default function App() {
-  const isAutostart =
-    typeof window !== 'undefined' &&
-    new URLSearchParams(window.location.search).get('autostart') === '1';
+  const searchParams =
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const isAutostart = searchParams?.get('autostart') === '1';
+  const initialSiteParam: MissionSiteId = searchParams?.get('site') === 'moon' ? 'moon' : 'mars';
+  const initialMapParam: OutpostMapVariant =
+    searchParams?.get('map') === 'frontier' ? 'frontier' : 'classic';
 
   const [shellState, setShellState] = useState<ShellState>(isAutostart ? 'playing' : 'title');
-  const [selectedSite, setSelectedSite] = useState<MissionSiteId>('mars');
+  const [selectedSite, setSelectedSite] = useState<MissionSiteId>(initialSiteParam);
+  const [selectedMapVariant, setSelectedMapVariant] =
+    useState<OutpostMapVariant>(initialMapParam);
   const [crewColor, setCrewColor] = useState<string>('#38BDF8');
   const [gameState, setGameState] = useState<GameStateSnapshot>(() =>
-    createInitialGameState('mars')
+    createInitialGameState(initialSiteParam, initialMapParam)
   );
   const [bestScore, setBestScore] = useState<number>(100);
   const [totalTasksDone, setTotalTasksDone] = useState<number>(0);
 
   // Active modals & overlays
   const [nearRoom, setNearRoom] = useState<RoomId | null>(null);
+  const [nearProp, setNearProp] = useState<OutpostPropInteraction | null>(null);
+  const [nearCrew, setNearCrew] = useState<NearbyCrewInfo | null>(null);
+  const [joinCrewNonce, setJoinCrewNonce] = useState<number>(0);
+  const [cadetEmoteCommand, setCadetEmoteCommand] = useState<{
+    nonce: number;
+    emote: CadetEmoteId;
+  } | null>(null);
+  const [checkedPropsToday, setCheckedPropsToday] = useState<string[]>([]);
+  const [propActionToast, setPropActionToast] = useState<string>('');
   const [currentRoom, setCurrentRoom] = useState<RoomId | null>(null);
   const [activeModalRoom, setActiveModalRoom] = useState<RoomId | null>(null);
   const [adaptiveTrackTitle, setAdaptiveTrackTitle] = useState<string>('Starlight Spine Promenade');
   const adaptiveTrackCacheRef = React.useRef<Map<string, AdaptiveSoundtrackData>>(new Map());
   const latestMusicKeyRef = React.useRef<string>('');
   const [showNasaModal, setShowNasaModal] = useState<boolean>(false);
+  const [showGuideModal, setShowGuideModal] = useState<boolean>(false);
   const [showInstructionsModal, setShowInstructionsModal] = useState<boolean>(false);
+  const [showDailyLogModal, setShowDailyLogModal] = useState<boolean>(false);
+  const [showWallEModal, setShowWallEModal] = useState<boolean>(false);
+  const [nearWallE, setNearWallE] = useState<boolean>(false);
+  const [wallECommand, setWallECommand] = useState<{
+    nonce: number;
+    action: 'thank' | 'tidy' | 'dance' | 'tip' | 'scan';
+    bubble?: string;
+  } | null>(null);
+  const [dancePartyUntil, setDancePartyUntil] = useState<number>(0);
+  const [crewFeastUntil, setCrewFeastUntil] = useState<number>(0);
   const [activeDynamicEvent, setActiveDynamicEvent] = useState<DynamicMissionEvent | null>(null);
   const [solSummaryToast, setSolSummaryToast] = useState<{
     sol: number;
@@ -173,7 +240,18 @@ export default function App() {
     radDelta: number;
     scienceDelta: number;
     tradeoffSummary: string;
+    oxygenAfter: number;
+    foodAfter: number;
+    radAfter: number;
+    scienceAfter: number;
+    tasksCount: number;
+    donkiClass: string;
   } | null>(null);
+  const [quickDailyNote, setQuickDailyNote] = useState<string>('');
+  const [dailyLogFeedback, setDailyLogFeedback] = useState<string>('');
+  const [dailyLogs, setDailyLogs] = useState<DailyLogEntry[]>(() =>
+    typeof window !== 'undefined' ? readLocalDailyLogs() : []
+  );
   const [endSnapshot, setEndSnapshot] = useState<RunEndSnapshot | null>(null);
   const [dailyMilestones, setDailyMilestones] = useState<DailyMilestone[]>([]);
   const [lastSolEventNote, setLastSolEventNote] = useState<string | undefined>(undefined);
@@ -226,30 +304,48 @@ export default function App() {
   }, []);
 
   const startNewGame = useCallback(
-    (siteOverride?: MissionSiteId) => {
+    (siteOverride?: MissionSiteId, mapOverride?: OutpostMapVariant) => {
       const targetSite = siteOverride || selectedSite;
+      const targetMap = mapOverride || selectedMapVariant;
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
       }
       document.body.dataset.state = 'playing';
       setShellState('playing');
-      setGameState(createInitialGameState(targetSite));
+      setGameState(createInitialGameState(targetSite, targetMap));
       setTotalTasksDone(0);
       setDailyMilestones([]);
       setLastSolEventNote(undefined);
       setActiveModalRoom(null);
       setShowNasaModal(false);
       setShowInstructionsModal(false);
+      setShowWallEModal(false);
       setActiveDynamicEvent(null);
       setSolSummaryToast(null);
       setEndSnapshot(null);
+      setDancePartyUntil(0);
+      setCrewFeastUntil(0);
+      setCheckedPropsToday([]);
+      setPropActionToast('');
       setLogbookNote('');
       setLogbookError('');
       setLogbookSavedMsg('');
       spaceAudio.playSolAdvance();
     },
-    [selectedSite]
+    [selectedMapVariant, selectedSite]
   );
+
+  useEffect(() => {
+    if (!propActionToast) return;
+    const id = window.setTimeout(() => setPropActionToast(''), 4200);
+    return () => window.clearTimeout(id);
+  }, [propActionToast]);
+
+  const triggerCrewDance = useCallback((e?: React.MouseEvent<HTMLButtonElement>) => {
+    if (e?.currentTarget) e.currentTarget.blur();
+    setDancePartyUntil(Date.now() + 7000);
+    spaceAudio.playSolAdvance();
+  }, []);
 
   const toggleMute = useCallback((e?: React.MouseEvent<HTMLButtonElement>) => {
     if (e?.currentTarget) e.currentTarget.blur();
@@ -275,9 +371,9 @@ export default function App() {
   const handleRestart = useCallback(
     (e?: React.MouseEvent<HTMLButtonElement>) => {
       if (e?.currentTarget) e.currentTarget.blur();
-      startNewGame(gameState.siteId);
+      startNewGame(gameState.siteId, gameState.mapVariant);
     },
-    [gameState.siteId, startNewGame]
+    [gameState.mapVariant, gameState.siteId, startNewGame]
   );
 
   // Keyboard shortcuts for Title start, Pause [P / Esc], Mute [M], Restart [R]
@@ -301,8 +397,20 @@ export default function App() {
           setShowNasaModal(false);
           return;
         }
+        if (showGuideModal) {
+          setShowGuideModal(false);
+          return;
+        }
         if (showInstructionsModal) {
           setShowInstructionsModal(false);
+          return;
+        }
+        if (showDailyLogModal) {
+          setShowDailyLogModal(false);
+          return;
+        }
+        if (showWallEModal) {
+          setShowWallEModal(false);
           return;
         }
         if (activeDynamicEvent) {
@@ -315,14 +423,48 @@ export default function App() {
         return;
       }
 
-      if (e.code === 'KeyP' && !activeModalRoom && !showNasaModal && !showInstructionsModal) {
+      if (
+        e.code === 'KeyP' &&
+        !activeModalRoom &&
+        !showNasaModal &&
+        !showGuideModal &&
+        !showInstructionsModal &&
+        !showDailyLogModal &&
+        !showWallEModal
+      ) {
         if (shellState === 'playing' || shellState === 'paused') {
           togglePause();
         }
-      } else if (e.code === 'KeyM' && !activeModalRoom && !showInstructionsModal) {
+      } else if (
+        e.code === 'KeyM' &&
+        !activeModalRoom &&
+        !showGuideModal &&
+        !showInstructionsModal &&
+        !showDailyLogModal &&
+        !showWallEModal
+      ) {
         toggleMute();
-      } else if (e.code === 'KeyR' && shellState === 'playing' && !activeModalRoom) {
+      } else if (
+        e.code === 'KeyR' &&
+        shellState === 'playing' &&
+        !activeModalRoom &&
+        !showGuideModal &&
+        !showDailyLogModal &&
+        !showWallEModal
+      ) {
         handleRestart();
+      } else if (
+        e.code === 'KeyG' &&
+        shellState === 'playing' &&
+        !activeModalRoom &&
+        !showGuideModal &&
+        !showInstructionsModal &&
+        !showDailyLogModal &&
+        !showWallEModal &&
+        !showNasaModal &&
+        !activeDynamicEvent
+      ) {
+        triggerCrewDance();
       }
     };
 
@@ -332,12 +474,16 @@ export default function App() {
     shellState,
     activeModalRoom,
     showNasaModal,
+    showGuideModal,
     showInstructionsModal,
+    showDailyLogModal,
+    showWallEModal,
     activeDynamicEvent,
     startNewGame,
     togglePause,
     toggleMute,
     handleRestart,
+    triggerCrewDance,
   ]);
 
   const handleUpdatePower = (newAlloc: PowerAllocation) => {
@@ -355,16 +501,32 @@ export default function App() {
       radiationMsv?: number;
       science?: number;
       bonusPowerKw?: number;
+      pantryDelta?: Partial<CropPantryInventory>;
     }
   ) => {
     spaceAudio.playTaskComplete();
-    setTotalTasksDone((c) => c + 1);
+    if (!gameState.completedTasksToday.includes(roomId)) {
+      setTotalTasksDone((c) => c + 1);
+    }
+    const nextExpectedScore = gameState.scienceScore + (deltas.science || 20);
+    if (nextExpectedScore > bestScore) setBestScore(nextExpectedScore);
+
     setGameState((prev) => {
       if (prev.completedTasksToday.includes(roomId)) return prev;
       const nextBonusKw = prev.bonusPowerKw + (deltas.bonusPowerKw || 0);
       const nextAvailableKw = computeAvailablePowerKw(prev.siteId, prev.sol, nextBonusKw);
       const nextScore = prev.scienceScore + (deltas.science || 20);
-      if (nextScore > bestScore) setBestScore(nextScore);
+      const nextPantry: CropPantryInventory = { ...prev.pantry };
+      let harvestedUnitsAdded = 0;
+      if (deltas.pantryDelta) {
+        (Object.keys(deltas.pantryDelta) as Array<keyof CropPantryInventory>).forEach((k) => {
+          const add = deltas.pantryDelta?.[k] || 0;
+          nextPantry[k] = Math.min(18, (nextPantry[k] || 0) + add);
+          if (k !== 'h2oDrops' && add > 0) {
+            harvestedUnitsAdded += add;
+          }
+        });
+      }
 
       return {
         ...prev,
@@ -377,9 +539,162 @@ export default function App() {
         scienceScore: nextScore,
         bonusPowerKw: nextBonusKw,
         availablePowerKw: nextAvailableKw,
+        pantry: nextPantry,
+        cropsHarvestedTotal: prev.cropsHarvestedTotal + harvestedUnitsAdded,
         completedTasksToday: [...prev.completedTasksToday, roomId],
       };
     });
+  };
+
+  const handleAcademyBonusReward = useCallback(
+    (
+      deltas: {
+        oxygen?: number;
+        food?: number;
+        radiationMsv?: number;
+        science?: number;
+        pantryDelta?: Partial<CropPantryInventory>;
+      },
+      toastNote: string
+    ) => {
+      spaceAudio.playTaskComplete();
+      const addedSci = deltas.science || 5;
+      const nextExpectedScore = gameState.scienceScore + addedSci;
+      if (nextExpectedScore > bestScore) setBestScore(nextExpectedScore);
+
+      setGameState((prev) => {
+        const nextPantry: CropPantryInventory = { ...prev.pantry };
+        if (deltas.pantryDelta) {
+          (Object.keys(deltas.pantryDelta) as Array<keyof CropPantryInventory>).forEach((k) => {
+            const add = deltas.pantryDelta?.[k] || 0;
+            nextPantry[k] = Math.min(18, (nextPantry[k] || 0) + add);
+          });
+        }
+        return {
+          ...prev,
+          oxygen: Math.max(0, Math.min(100, Math.round(prev.oxygen + (deltas.oxygen || 0)))),
+          food: Math.max(0, Math.min(100, Math.round(prev.food + (deltas.food || 0)))),
+          radiationMsv: Math.max(
+            0,
+            Number((prev.radiationMsv + (deltas.radiationMsv || 0)).toFixed(1))
+          ),
+          scienceScore: prev.scienceScore + addedSci,
+          pantry: nextPantry,
+        };
+      });
+      setPropActionToast(`🎓 ${toastNote}`);
+    },
+    [bestScore, gameState.scienceScore]
+  );
+
+  const handleForageStarterSprouts = () => {
+    spaceAudio.playBreakerClick(true);
+    setGameState((prev) => ({
+      ...prev,
+      cropsHarvestedTotal: prev.cropsHarvestedTotal + 6,
+      pantry: {
+        mizuna: Math.min(18, prev.pantry.mizuna + 1),
+        wheat: Math.min(18, prev.pantry.wheat + 1),
+        radish: Math.min(18, prev.pantry.radish + 1),
+        berries: Math.min(18, prev.pantry.berries + 1),
+        microgreens: Math.min(18, prev.pantry.microgreens + 1),
+        spirulina: Math.min(18, prev.pantry.spirulina + 1),
+        h2oDrops: Math.min(18, prev.pantry.h2oDrops + 2),
+      },
+    }));
+  };
+
+  const handleInteractOutpostProp = useCallback(
+    (prop: OutpostPropInteraction) => {
+      if (prop.id === 'lounge-dance') {
+        setDancePartyUntil(Date.now() + 7000);
+        spaceAudio.playSolAdvance();
+        setPropActionToast('💃 Neon Dance Pad Party started with Han, Feng, Xin & Kun!');
+        return;
+      }
+
+      const alreadyChecked = checkedPropsToday.includes(prop.id);
+
+      if (prop.id === 'lounge-eat') {
+        spaceAudio.playTaskComplete();
+        setCrewFeastUntil(Date.now() + 7000);
+        if (!alreadyChecked) {
+          setCheckedPropsToday((prev) => [...prev, prop.id]);
+          const nextExpectedScore = gameState.scienceScore + 10;
+          if (nextExpectedScore > bestScore) setBestScore(nextExpectedScore);
+          setGameState((prev) => ({
+            ...prev,
+            food: Math.min(100, prev.food + 5),
+            oxygen: Math.min(100, prev.oxygen + 2),
+            scienceScore: prev.scienceScore + 10,
+          }));
+          setPropActionToast('🍽️ Crew Dining Table snack enjoyed! (+5% Food, +2% O2, +10 Science)');
+        } else {
+          setPropActionToast('🍽️ Relaxing snack break in Crew Mess Lounge!');
+        }
+        return;
+      }
+
+      if (prop.id === 'lounge-rest') {
+        spaceAudio.playTaskComplete();
+        if (!alreadyChecked) {
+          setCheckedPropsToday((prev) => [...prev, prop.id]);
+          setGameState((prev) => ({
+            ...prev,
+            radiationMsv: Math.max(0, Number((prev.radiationMsv - 2.0).toFixed(1))),
+            oxygen: Math.min(100, prev.oxygen + 3),
+          }));
+          setPropActionToast('💤 Recharged in Rest Pod Alpha! (-2.0 mSv calm rest, +3% O2)');
+        } else {
+          setPropActionToast('💤 Cozy zero-G nap break in Sleep Pod!');
+        }
+        return;
+      }
+
+      // Exterior Satellites, Solar Wing & Cargo Rover inspect/clean
+      if (!alreadyChecked) {
+        const scienceGain = prop.id === 'prop-solar' ? 15 : prop.id === 'prop-rover' ? 10 : 12;
+        spaceAudio.playTaskComplete();
+        setCheckedPropsToday((prev) => [...prev, prop.id]);
+        const nextExpectedScore = gameState.scienceScore + scienceGain;
+        if (nextExpectedScore > bestScore) setBestScore(nextExpectedScore);
+        setGameState((prev) => ({
+          ...prev,
+          scienceScore: prev.scienceScore + scienceGain,
+        }));
+        setPropActionToast(`🛰️ ${prop.label} cleaned & checked! (+${scienceGain} Science)`);
+      } else {
+        spaceAudio.playBreakerClick(true);
+        setPropActionToast(`✓ ${prop.label} already calibrated today — telemetry nominal!`);
+      }
+    },
+    [bestScore, checkedPropsToday, gameState.scienceScore]
+  );
+
+  const handleCookAndFeedCrew = (recipe: SpaceKitchenRecipe) => {
+    spaceAudio.playTaskComplete();
+    if (!gameState.completedTasksToday.includes('foodlab')) {
+      setTotalTasksDone((c) => c + 1);
+    }
+    const nextExpectedScore = gameState.scienceScore + recipe.rewards.science;
+    if (nextExpectedScore > bestScore) setBestScore(nextExpectedScore);
+
+    setGameState((prev) => {
+      const nextPantry = consumeRecipeIngredients(prev.pantry, recipe);
+      const alreadyDone = prev.completedTasksToday.includes('foodlab');
+      return {
+        ...prev,
+        oxygen: Math.max(0, Math.min(100, Math.round(prev.oxygen + recipe.rewards.oxygen))),
+        food: Math.max(0, Math.min(100, Math.round(prev.food + recipe.rewards.food))),
+        scienceScore: prev.scienceScore + recipe.rewards.science,
+        pantry: nextPantry,
+        mealsCookedTotal: prev.mealsCookedTotal + 1,
+        completedTasksToday: alreadyDone
+          ? prev.completedTasksToday
+          : [...prev.completedTasksToday, 'foodlab'],
+      };
+    });
+    setCrewFeastUntil(Date.now() + 12000);
   };
 
   const triggerRandomDynamicEvent = () => {
@@ -424,6 +739,8 @@ export default function App() {
           food: nextState.food,
           radiationMsv: nextState.radiationMsv,
           tasksCompletedTotal: totalTasksDone,
+          wallEScansCount: nextState.wallEScansCount,
+          scienceBotEarned: hasScienceBotBadge(nextState.wallEScansCount),
           milestones: allMilestones,
         });
         setLogbookNote('');
@@ -499,6 +816,8 @@ export default function App() {
         food: updatedState.food,
         radiationMsv: updatedState.radiationMsv,
         tasksCompletedTotal: totalTasksDone,
+        wallEScansCount: updatedState.wallEScansCount,
+        scienceBotEarned: hasScienceBotBadge(updatedState.wallEScansCount),
         milestones: updatedMilestones,
       };
       setGameState({ ...updatedState, sol: Math.min(7, gameState.sol) });
@@ -514,6 +833,10 @@ export default function App() {
 
     spaceAudio.playSolAdvance();
     setGameState(updatedState);
+    setCheckedPropsToday([]);
+    setPropActionToast('');
+    setQuickDailyNote('');
+    setDailyLogFeedback('');
     setSolSummaryToast({
       sol: gameState.sol,
       oxygenDelta: proj.oxygenDelta,
@@ -521,6 +844,12 @@ export default function App() {
       radDelta: proj.radiationDeltaMsv,
       scienceDelta: proj.scienceDelta,
       tradeoffSummary: proj.tradeoffSummary,
+      oxygenAfter: proj.nextOxygen,
+      foodAfter: proj.nextFood,
+      radAfter: proj.nextRadiationMsv,
+      scienceAfter: proj.nextScienceScore,
+      tasksCount: gameState.completedTasksToday.length,
+      donkiClass: getDonkiEventForSol(gameState.sol).classType,
     });
 
     // Trigger a dynamic trade-off decision event on even Sols (Sol 2, 4, 6)
@@ -528,6 +857,37 @@ export default function App() {
       const evtIdx = (nextSolNum / 2 - 1) % BUILTIN_DYNAMIC_EVENTS.length;
       setActiveDynamicEvent(BUILTIN_DYNAMIC_EVENTS[evtIdx]);
     }
+  };
+
+  const handleSaveQuickDailyLog = (e: React.FormEvent, customTargetSol?: number) => {
+    e.preventDefault();
+    const cleanNote = quickDailyNote.trim();
+    if (!cleanNote) {
+      setDailyLogFeedback('Write a short sentence about today’s Sol first!');
+      return;
+    }
+
+    const targetSol = customTargetSol ?? solSummaryToast?.sol ?? gameState.sol;
+    const entry = createDailyLogEntry({
+      sol: targetSol,
+      siteId: gameState.siteId,
+      donkiClass: solSummaryToast?.donkiClass || getDonkiEventForSol(targetSol).classType,
+      oxygen: solSummaryToast ? solSummaryToast.oxygenAfter : gameState.oxygen,
+      food: solSummaryToast ? solSummaryToast.foodAfter : gameState.food,
+      radiationMsv: solSummaryToast ? solSummaryToast.radAfter : gameState.radiationMsv,
+      scienceScore: solSummaryToast ? solSummaryToast.scienceAfter : gameState.scienceScore,
+      tasksCompletedCount: solSummaryToast
+        ? solSummaryToast.tasksCount
+        : gameState.completedTasksToday.length,
+      note: cleanNote,
+    });
+
+    const nextLogs = upsertDailyLog(dailyLogs, entry);
+    setDailyLogs(nextLogs);
+    writeLocalDailyLogs(nextLogs);
+    setQuickDailyNote('');
+    setDailyLogFeedback(`✓ Saved Sol ${entry.sol} log to local mission history!`);
+    spaceAudio.playTaskComplete();
   };
 
   const handleSaveLogbookEntry = async (e: React.FormEvent) => {
@@ -542,7 +902,15 @@ export default function App() {
     setLogbookError('');
     setLogbookSaving(true);
     const cleanName = logbookName.trim().slice(0, 60) || 'Junior Astronaut';
-    const milestonesSummary = formatMilestonesSummary(endSnapshot.milestones);
+    const dailyLogDigest = formatDailyLogsForSummary(dailyLogs);
+    const baseSummary = formatMilestonesSummary(endSnapshot.milestones);
+    const badgeDigest = endSnapshot.scienceBotEarned
+      ? '🏅 Badge: Science Bot'
+      : `🤖 Scans: ${endSnapshot.wallEScansCount}/${SCIENCE_BOT_SCAN_TARGET}`;
+    const fullBase = baseSummary ? `${baseSummary} | ${badgeDigest}` : badgeDigest;
+    const milestonesSummary = (
+      dailyLogDigest ? `${fullBase} | Daily Logs: ${dailyLogDigest}` : fullBase
+    ).slice(0, 500);
     const payload: MissionLogInput = {
       astronautName: cleanName,
       siteId: gameState.siteId,
@@ -589,6 +957,7 @@ export default function App() {
   const currentDonki = getDonkiEventForSol(gameState.sol);
   const threeSolForecast = getThreeSolForecast(gameState.sol, gameState.maxSols);
   const currentSiteConfig = MISSION_SITES[gameState.siteId];
+  const currentMapDesign = getOutpostMapDesign(gameState.siteId, gameState.mapVariant);
   const nearRoomObj = OUTPOST_ROOMS.find((r) => r.id === nearRoom);
   const effectiveMusicRoom = activeModalRoom ?? currentRoom;
   const crisisSeverity = computeCrisisSeverity(gameState, activeDynamicEvent !== null);
@@ -635,8 +1004,12 @@ export default function App() {
           ? [64, 65, 69, 71, 72, 71, 65, 64]
           : roomKey === 'hydroponics'
           ? [62, 66, 69, 74, 73, 69, 66, 62]
+          : roomKey === 'foodlab'
+          ? [65, 69, 72, 76, 74, 72, 69, 67]
           : roomKey === 'shield'
           ? [57, 60, 64, 69, 67, 64, 60, 59]
+          : roomKey === 'academy'
+          ? [64, 67, 72, 76, 74, 72, 67, 64]
           : [60, 64, 67, 72, 71, 67, 64, 62],
       bassNotes: crisisSeverity === 'critical' ? [36, 36, 37, 40] : [36, 41, 43, 36],
       padNotes: [48, 55, 60],
@@ -703,8 +1076,28 @@ export default function App() {
         activeModalRoom={activeModalRoom}
         onSelectRoom={(r) => setActiveModalRoom(r)}
         onNearRoomChange={setNearRoom}
+        onNearPropChange={setNearProp}
+        onNearCrewChange={setNearCrew}
+        joinCrewNonce={joinCrewNonce}
+        cadetEmoteCommand={cadetEmoteCommand}
+        onInteractProp={handleInteractOutpostProp}
+        checkedPropsToday={checkedPropsToday}
         onCurrentRoomChange={setCurrentRoom}
+        isModalOpen={Boolean(
+          activeModalRoom ||
+            showNasaModal ||
+            showGuideModal ||
+            showInstructionsModal ||
+            showDailyLogModal ||
+            showWallEModal ||
+            activeDynamicEvent
+        )}
         crewColor={crewColor}
+        dancePartyUntil={dancePartyUntil}
+        crewFeastUntil={crewFeastUntil}
+        onInteractWallE={() => setShowWallEModal(true)}
+        onNearWallEChange={setNearWallE}
+        wallECommand={wallECommand}
       />
 
       {/* 2. TITLE SCREEN OVERLAY (Negative-Space Composition + Custom Inline SVG Title Lockup) */}
@@ -720,7 +1113,7 @@ export default function App() {
           </div>
 
           {/* Left-Third Focal Lockup over Calm Negative Space */}
-          <div className="max-w-xl space-y-5 my-auto">
+          <div className="max-w-xl space-y-4 my-auto">
             {/* Custom Inline SVG Title Emblem */}
             <svg
               viewBox="0 0 540 120"
@@ -825,7 +1218,7 @@ export default function App() {
               </text>
             </svg>
 
-            <p className="text-sm sm:text-base text-slate-200 leading-relaxed max-w-lg">
+            <p className="text-sm text-slate-200 leading-relaxed max-w-lg">
               Run your own space station like a real NASA Commander! Walk your crewmate between
               workstations, complete daily tasks, and balance{' '}
               <strong className="text-amber-400">Power</strong>,{' '}
@@ -835,11 +1228,11 @@ export default function App() {
             </p>
 
             {/* Outpost Destination Selector (Moon vs Mars) */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="text-xs font-mono text-slate-400">
                 1. CHOOSE YOUR NASA MISSION OUTPOST:
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {(['mars', 'moon'] as const).map((siteKey) => {
                   const cfg = MISSION_SITES[siteKey];
                   const active = selectedSite === siteKey;
@@ -849,10 +1242,10 @@ export default function App() {
                       type="button"
                       onClick={() => {
                         setSelectedSite(siteKey);
-                        setGameState(createInitialGameState(siteKey));
+                        setGameState(createInitialGameState(siteKey, selectedMapVariant));
                         spaceAudio.playBreakerClick(true);
                       }}
-                      className={`p-3.5 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                      className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
                         active
                           ? 'bg-slate-900/95 border-cyan-400 shadow-lg'
                           : 'bg-slate-950/80 border-slate-800 hover:border-slate-700'
@@ -865,7 +1258,53 @@ export default function App() {
                         </span>
                       </div>
                       <div className="text-xs text-slate-400 mt-0.5">{cfg.subtitle}</div>
-                      <p className="text-xs text-slate-300 mt-1.5">{cfg.kidSummary}</p>
+                      <p className="text-xs text-slate-300 mt-1 line-clamp-2">{cfg.kidSummary}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Map Layout Variant Selector (Original Core vs New Ring Sector) */}
+            <div className="space-y-1.5">
+              <div className="text-xs font-mono text-slate-400">
+                2. CHOOSE OUTPOST MAP DESIGN ({MISSION_SITES[selectedSite].name.toUpperCase()}):
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {(['classic', 'frontier'] as const).map((variantKey) => {
+                  const design = OUTPOST_MAP_DESIGNS[selectedSite][variantKey];
+                  const active = selectedMapVariant === variantKey;
+                  return (
+                    <button
+                      key={variantKey}
+                      type="button"
+                      data-testid={`map-design-${variantKey}`}
+                      onClick={() => {
+                        setSelectedMapVariant(variantKey);
+                        setGameState(createInitialGameState(selectedSite, variantKey));
+                        spaceAudio.playBreakerClick(true);
+                      }}
+                      className={`p-2.5 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                        active
+                          ? 'bg-slate-900/95 border-amber-400 shadow-lg'
+                          : 'bg-slate-950/80 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-xs sm:text-sm text-white">
+                          {design.name}
+                        </span>
+                        <span
+                          className={`text-[10px] font-mono ${
+                            variantKey === 'frontier' ? 'text-amber-300' : 'text-sky-300'
+                          }`}
+                        >
+                          {design.badge}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 mt-1 leading-snug">
+                        {design.tagline}
+                      </p>
                     </button>
                   );
                 })}
@@ -874,7 +1313,7 @@ export default function App() {
 
             {/* Suit Color Picker */}
             <div className="flex items-center gap-3">
-              <span className="text-xs font-mono text-slate-400">2. CREWMATE SUIT:</span>
+              <span className="text-xs font-mono text-slate-400">3. CREWMATE SUIT:</span>
               <div className="flex items-center gap-2">
                 {CREW_SUIT_COLORS.map((c) => (
                   <button
@@ -891,29 +1330,36 @@ export default function App() {
               </div>
             </div>
 
-            {/* Primary CTA + Secondary Actions (<= 3 menu actions total) */}
-            <div className="flex flex-wrap items-center gap-2.5 pt-1">
+            {/* Primary CTA + Secondary Actions */}
+            <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
               <button
                 type="button"
                 data-start="true"
-                onClick={() => startNewGame(selectedSite)}
+                onClick={() => startNewGame(selectedSite, selectedMapVariant)}
                 className="px-6 py-3 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-display font-extrabold text-base tracking-wide shadow-lg cursor-pointer transition-transform active:scale-95 whitespace-nowrap shrink-0"
               >
                 Start Mission [Enter]
               </button>
               <button
                 type="button"
+                onClick={() => setShowGuideModal(true)}
+                className="px-3.5 py-3 rounded-xl bg-amber-400/95 hover:bg-amber-300 text-slate-950 font-bold text-xs cursor-pointer whitespace-nowrap shrink-0"
+              >
+                🎓 Educator &amp; Youth Guide
+              </button>
+              <button
+                type="button"
                 onClick={() => setShowNasaModal(true)}
                 className="px-3.5 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 font-semibold text-xs cursor-pointer whitespace-nowrap shrink-0"
               >
-                NASA Open Data & Charts
+                NASA Open Data &amp; Charts
               </button>
               <button
                 type="button"
                 onClick={() => setShowInstructionsModal(true)}
                 className="px-3.5 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 font-semibold text-xs cursor-pointer whitespace-nowrap shrink-0"
               >
-                Custom Instructions & Cloud
+                Custom Instructions &amp; Cloud
               </button>
             </div>
           </div>
@@ -935,8 +1381,11 @@ export default function App() {
             <div className="pointer-events-auto flex flex-wrap items-center gap-3 px-4 py-2.5 rounded-2xl bg-[#090E1A]/92 border-2 border-slate-700/90 shadow-xl">
               {/* SOL COUNTER */}
               <div className="pr-3 border-r border-slate-800">
-                <div className="text-[10px] font-mono uppercase tracking-wider text-cyan-400">
-                  {currentSiteConfig.id === 'mars' ? 'MARS SOL' : 'LUNAR DAY'}
+                <div className="text-[10px] font-mono uppercase tracking-wider text-cyan-400 whitespace-nowrap">
+                  {currentSiteConfig.id === 'mars' ? 'MARS SOL' : 'LUNAR DAY'} ·{' '}
+                  <span className="text-slate-300">
+                    {currentMapDesign.id === 'frontier' ? 'RING' : 'CORE'}
+                  </span>
                 </div>
                 <div className="text-2xl font-extrabold font-mono text-white tabular-nums hud-stroke">
                   {Math.round(gameState.sol)}/{gameState.maxSols}
@@ -1175,39 +1624,121 @@ export default function App() {
             </div>
           </div>
 
-          {/* Optional Sol Summary Toast Banner */}
+          {/* Overnight Sol Report + Quick HUD Daily Log Capture */}
           {solSummaryToast && (
-            <div className="pointer-events-auto self-center max-w-xl px-5 py-3 rounded-2xl bg-[#090E1A]/95 border-2 border-cyan-400 shadow-2xl flex items-center justify-between gap-4">
-              <div>
-                <div className="text-xs font-mono font-bold text-cyan-400">
-                  ☀️ SOL {solSummaryToast.sol} OVERNIGHT REPORT · WELCOME TO SOL {gameState.sol}!
+            <div className="pointer-events-auto self-center w-full max-w-2xl px-5 py-3.5 rounded-2xl bg-[#090E1A]/95 border-2 border-cyan-400 shadow-2xl space-y-2.5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-xs font-mono font-bold text-cyan-400">
+                    ☀️ SOL {solSummaryToast.sol} OVERNIGHT REPORT · WELCOME TO SOL {gameState.sol}!
+                  </div>
+                  <div className="text-xs text-slate-200 mt-0.5">
+                    O2 {solSummaryToast.oxygenDelta >= 0 ? '+' : ''}
+                    {solSummaryToast.oxygenDelta}% · Food {solSummaryToast.foodDelta >= 0 ? '+' : ''}
+                    {solSummaryToast.foodDelta}% · Rad +{solSummaryToast.radDelta}mSv · Science +
+                    {solSummaryToast.scienceDelta}
+                  </div>
+                  <div className="text-[11px] text-amber-300 mt-0.5">
+                    {solSummaryToast.tradeoffSummary}
+                  </div>
                 </div>
-                <div className="text-xs text-slate-200 mt-0.5">
-                  O2 {solSummaryToast.oxygenDelta >= 0 ? '+' : ''}
-                  {solSummaryToast.oxygenDelta}% · Food {solSummaryToast.foodDelta >= 0 ? '+' : ''}
-                  {solSummaryToast.foodDelta}% · Rad +{solSummaryToast.radDelta}mSv · Science +
-                  {solSummaryToast.scienceDelta}
-                </div>
-                <div className="text-[11px] text-amber-300 mt-0.5">
-                  {solSummaryToast.tradeoffSummary}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setSolSummaryToast(null)}
+                  className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 cursor-pointer shrink-0"
+                >
+                  Close
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setSolSummaryToast(null)}
-                className="px-3 py-1 rounded-lg bg-slate-800 text-xs text-slate-300 cursor-pointer"
+
+              <form
+                onSubmit={(e) => handleSaveQuickDailyLog(e, solSummaryToast.sol)}
+                className="pt-2 border-t border-slate-800 space-y-1.5"
               >
-                Got It
-              </button>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label
+                    htmlFor="hud-quick-daily-log-input"
+                    className="text-[11px] font-mono text-emerald-300 font-bold"
+                  >
+                    📓 QUICK DAILY LOG FOR SOL {solSummaryToast.sol}:
+                  </label>
+                  <div className="flex flex-wrap gap-1">
+                    {[
+                      'Saved power for O2 & crops',
+                      'Raised Water Shield for solar flare',
+                      'Cleaned solar dust & boosted Science',
+                    ].map((chip) => (
+                      <button
+                        key={chip}
+                        type="button"
+                        onClick={() => {
+                          setQuickDailyNote(chip);
+                          setDailyLogFeedback('');
+                        }}
+                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] text-cyan-300 cursor-pointer"
+                      >
+                        + {chip}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="hud-quick-daily-log-input"
+                    type="text"
+                    maxLength={200}
+                    value={quickDailyNote}
+                    onChange={(e) => {
+                      setQuickDailyNote(e.target.value);
+                      if (dailyLogFeedback) setDailyLogFeedback('');
+                    }}
+                    placeholder={`Record what you learned on Sol ${solSummaryToast.sol}...`}
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-xs text-white"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3.5 py-1.5 rounded-lg bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-bold text-xs cursor-pointer whitespace-nowrap"
+                  >
+                    Save Daily Log
+                  </button>
+                </div>
+                {dailyLogFeedback && (
+                  <div className="text-[11px] font-mono text-emerald-300">{dailyLogFeedback}</div>
+                )}
+              </form>
             </div>
           )}
 
-          {/* Bottom Perimeter Dock: Interactive Crewmate Task Bar + Next Sol Button */}
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div className="pointer-events-auto flex flex-wrap items-center gap-1.5 px-3 py-2 rounded-2xl bg-[#090E1A]/92 border-2 border-slate-700/90 shadow-xl">
-              <span className="text-xs font-mono font-bold text-amber-400 mr-1">
-                DAILY TASKS ({gameState.completedTasksToday.length}/6):
+          {/* Compact Emote Chips + Bottom Perimeter Dock: Interactive Crewmate Task Bar + Dance + Guide + Daily Log + Next Sol */}
+          <div>
+            <div className="pointer-events-auto mb-1.5 flex items-center gap-1 w-fit px-2 py-1 rounded-xl bg-[#090E1A]/90 border border-slate-700/80 shadow-lg">
+              <span className="text-[10px] font-mono font-bold text-slate-400 mr-0.5">
+                EMOTE:
               </span>
+              {CADET_EMOTES.map((em) => (
+                <button
+                  key={em.id}
+                  type="button"
+                  data-testid={`emote-btn-${em.id}`}
+                  aria-label={`Play ${em.label} Emote [${em.keyHint}]`}
+                  onClick={(e) => {
+                    e.currentTarget.blur();
+                    setCadetEmoteCommand({
+                      nonce: Date.now() + Math.random(),
+                      emote: em.id,
+                    });
+                  }}
+                  className="px-2 py-0.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-slate-600/80 text-[11px] font-semibold text-slate-100 cursor-pointer whitespace-nowrap"
+                >
+                  {em.emoji} {em.label} <span className="text-slate-400 font-mono">[{em.keyHint}]</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="pointer-events-auto flex flex-wrap items-center gap-1 px-2 py-1.5 rounded-2xl bg-[#090E1A]/92 border-2 border-slate-700/90 shadow-xl">
+                <span className="text-[11px] font-mono font-bold text-amber-400 mr-0.5">
+                  TASKS ({gameState.completedTasksToday.length}/{OUTPOST_ROOMS.length}):
+                </span>
               {OUTPOST_ROOMS.map((room) => {
                 const done = gameState.completedTasksToday.includes(room.id);
                 return (
@@ -1215,7 +1746,7 @@ export default function App() {
                     key={room.id}
                     type="button"
                     onClick={() => setActiveModalRoom(room.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap ${
                       done
                         ? 'bg-emerald-950/80 border border-emerald-500 text-emerald-300'
                         : 'bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white'
@@ -1227,26 +1758,110 @@ export default function App() {
               })}
             </div>
 
-            <div className="pointer-events-auto flex items-center gap-2.5">
-              {nearRoomObj && (
+            <div className="pointer-events-auto flex items-center gap-1.5">
+              {nearRoomObj ? (
                 <button
                   type="button"
                   onClick={() => setActiveModalRoom(nearRoomObj.id)}
-                  className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-display font-extrabold text-sm shadow-lg cursor-pointer whitespace-nowrap"
+                  className="px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-display font-extrabold text-xs shadow-lg cursor-pointer whitespace-nowrap"
                 >
                   Use {nearRoomObj.shortLabel} [E]
                 </button>
+              ) : nearProp ? (
+                <button
+                  type="button"
+                  onClick={() => handleInteractOutpostProp(nearProp)}
+                  className="px-3 py-2 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-display font-extrabold text-xs shadow-lg cursor-pointer whitespace-nowrap"
+                >
+                  {nearProp.label} [E]
+                </button>
+              ) : nearWallE ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    spaceAudio.playWallEChirp('happy');
+                    setShowWallEModal(true);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-display font-extrabold text-xs shadow-lg cursor-pointer whitespace-nowrap"
+                >
+                  🤖 Talk WALL·E [T]
+                </button>
+              ) : (
+                nearCrew && (
+                  <button
+                    type="button"
+                    onClick={() => setJoinCrewNonce((n) => n + 1)}
+                    className="px-3 py-2 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-display font-extrabold text-xs shadow-lg cursor-pointer whitespace-nowrap"
+                  >
+                    🤝 Join {nearCrew.name} [H]
+                  </button>
+                )
               )}
 
               <button
                 type="button"
-                onClick={handleAdvanceSol}
-                className="px-5 py-2.5 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-display font-extrabold text-sm shadow-lg cursor-pointer whitespace-nowrap"
+                onClick={triggerCrewDance}
+                aria-label="Crew Dance Party [G]"
+                className="px-2.5 py-2 rounded-xl bg-[#090E1A]/92 hover:bg-slate-800 border-2 border-pink-500/60 text-pink-300 font-bold text-xs shadow-lg cursor-pointer whitespace-nowrap"
               >
-                Next Sol (Sleep & Run Night) →
+                💃 Dance [G]
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  spaceAudio.playWallEChirp('curious');
+                  setShowWallEModal(true);
+                }}
+                aria-label="Open WALL-E Robot Companion"
+                className="px-2.5 py-2 rounded-xl bg-[#090E1A]/92 hover:bg-slate-800 border-2 border-amber-400/70 text-amber-300 font-bold text-xs shadow-lg cursor-pointer whitespace-nowrap"
+              >
+                🤖 WALL·E
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowGuideModal(true)}
+                aria-label="Open Educator & Youth Astronaut Guide"
+                className="px-2.5 py-2 rounded-xl bg-[#090E1A]/92 hover:bg-slate-800 border-2 border-amber-400/60 text-amber-300 font-bold text-xs shadow-lg cursor-pointer whitespace-nowrap"
+              >
+                🎓 Guide
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setDailyLogFeedback('');
+                  setShowDailyLogModal(true);
+                }}
+                aria-label={`Open Daily Log History (${dailyLogs.length} entries)`}
+                className="px-2.5 py-2 rounded-xl bg-[#090E1A]/92 hover:bg-slate-800 border-2 border-emerald-500/60 text-emerald-300 font-bold text-xs shadow-lg cursor-pointer whitespace-nowrap"
+              >
+                📓 Log ({dailyLogs.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={handleAdvanceSol}
+                title="Sleep & Run Night Simulation"
+                className="px-3.5 py-2 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-display font-extrabold text-xs sm:text-sm shadow-lg cursor-pointer whitespace-nowrap"
+              >
+                Next Sol →
               </button>
             </div>
           </div>
+          </div>
+
+          {/* Interactive Satellite / Lounge Action Toast */}
+          {propActionToast && (
+            <div
+              role="status"
+              data-testid="prop-action-toast"
+              className="fixed bottom-16 left-1/2 -translate-x-1/2 z-20 pointer-events-auto px-4 py-2 rounded-xl bg-[#090E1A]/95 border border-cyan-400/80 text-xs font-mono text-cyan-200 shadow-2xl whitespace-nowrap"
+            >
+              {propActionToast}
+            </div>
+          )}
         </div>
       )}
 
@@ -1260,6 +1875,9 @@ export default function App() {
           onClose={() => setActiveModalRoom(null)}
           onUpdatePower={handleUpdatePower}
           onCompleteTask={handleCompleteTask}
+          onForageStarterSprouts={handleForageStarterSprouts}
+          onCookAndFeedCrew={handleCookAndFeedCrew}
+          onAcademyBonusReward={handleAcademyBonusReward}
           onTriggerEndSol={handleAdvanceSol}
         />
       )}
@@ -1267,6 +1885,15 @@ export default function App() {
       {/* 5. NASA REAL OPEN DATA & CHARTS MODAL */}
       {showNasaModal && (
         <NasaDataModal gameState={gameState} onClose={() => setShowNasaModal(false)} />
+      )}
+
+      {/* 5b. EDUCATOR & YOUTH MISSION ACADEMY GUIDE */}
+      {showGuideModal && (
+        <EducatorYouthGuideModal
+          isPlaying={shellState === 'playing'}
+          onClose={() => setShowGuideModal(false)}
+          onOpenRoomPractice={(r) => setActiveModalRoom(r)}
+        />
       )}
 
       {/* 6. CUSTOM INSTRUCTIONS & CLOUD DATABASE MODAL */}
@@ -1277,6 +1904,237 @@ export default function App() {
           onSaveInstructions={setCustomInstructions}
           onClose={() => setShowInstructionsModal(false)}
         />
+      )}
+
+      {/* 6a. WALL·E FRIENDLY ROBOT COMPANION MODAL */}
+      {showWallEModal && shellState === 'playing' && (
+        <WallEBuddyCard
+          gameState={gameState}
+          currentRoom={currentRoom ?? nearRoom}
+          scansCount={gameState.wallEScansCount}
+          onClose={() => setShowWallEModal(false)}
+          onThankWallE={() => {
+            const nextExpectedScore = gameState.scienceScore + 2;
+            if (nextExpectedScore > bestScore) setBestScore(nextExpectedScore);
+            setGameState((prev) => ({
+              ...prev,
+              scienceScore: prev.scienceScore + 2,
+            }));
+            setPropActionToast('💛 You thanked WALL-E! (+2 Science Marks & Kindness Boost!)');
+          }}
+          onScanStation={(report: StationScanReport) => {
+            const nextCount = gameState.wallEScansCount + 1;
+            const justUnlocked =
+              !hasScienceBotBadge(gameState.wallEScansCount) && hasScienceBotBadge(nextCount);
+            if (justUnlocked) {
+              const nextBest = Math.max(bestScore, gameState.scienceScore + 10);
+              setBestScore(nextBest);
+            }
+            setGameState((prev) => {
+              const updatedCount = prev.wallEScansCount + 1;
+              const unlockedNow =
+                !hasScienceBotBadge(prev.wallEScansCount) && hasScienceBotBadge(updatedCount);
+              return {
+                ...prev,
+                wallEScansCount: updatedCount,
+                scienceScore: prev.scienceScore + (unlockedNow ? 10 : 0),
+              };
+            });
+            setPropActionToast(
+              justUnlocked
+                ? '🏅 BADGE UNLOCKED: Science Bot! (10/10 WALL-E Scans Complete! +10 Sci)'
+                : `🔍 WALL·E scanned ${report.roomName} (${nextCount}/${SCIENCE_BOT_SCAN_TARGET} Scans)`
+            );
+          }}
+          onOpenSuggestedRoom={(roomId) => {
+            setShowWallEModal(false);
+            setActiveModalRoom(roomId);
+          }}
+          onSendWallEAction={(action, bubble) => {
+            setWallECommand({
+              nonce: Date.now() + Math.random(),
+              action,
+              bubble,
+            });
+          }}
+        />
+      )}
+
+      {/* 6b. HUD DAILY LOG & LOCAL MISSION PROGRESS HISTORY MODAL */}
+      {showDailyLogModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 pointer-events-auto"
+          role="dialog"
+          aria-label="Mission Daily Log History"
+        >
+          <div className="w-full max-w-2xl rounded-2xl bg-[#0B1120] border-2 border-emerald-500/60 shadow-2xl overflow-hidden flex flex-col max-h-[88vh]">
+            <div className="flex items-center justify-between px-6 py-4 bg-[#070B14] border-b border-slate-800">
+              <div>
+                <div className="text-xs font-mono text-emerald-400">
+                  LOCAL MISSION PROGRESS HISTORY · SOL {gameState.sol} OF {gameState.maxSols}
+                </div>
+                <h2 className="text-xl font-bold font-display text-white">
+                  📓 Astronaut Daily Mission Log
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDailyLogModal(false)}
+                className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm font-semibold text-slate-200 cursor-pointer"
+              >
+                Close [Esc]
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-4">
+              {/* Science Bot Achievement Badge Progress Card */}
+              <div
+                data-testid="daily-log-science-bot-badge"
+                className={`p-3 rounded-xl border flex flex-wrap items-center justify-between gap-2 ${
+                  hasScienceBotBadge(gameState.wallEScansCount)
+                    ? 'bg-amber-500/15 border-amber-400 text-amber-200'
+                    : 'bg-slate-900 border-cyan-500/40 text-slate-200'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl" aria-hidden="true">
+                    {hasScienceBotBadge(gameState.wallEScansCount) ? '🏅' : '🤖'}
+                  </span>
+                  <div>
+                    <div className="text-xs font-bold">
+                      {hasScienceBotBadge(gameState.wallEScansCount)
+                        ? 'Science Bot Badge Earned!'
+                        : 'Science Bot Achievement Badge'}
+                    </div>
+                    <div className="text-[11px] font-mono text-slate-300">
+                      {hasScienceBotBadge(gameState.wallEScansCount)
+                        ? `Awarded for completing ${gameState.wallEScansCount} WALL·E station scans this mission!`
+                        : `Scan ${SCIENCE_BOT_SCAN_TARGET} stations with WALL·E across the 7-Sol mission (${gameState.wallEScansCount}/${SCIENCE_BOT_SCAN_TARGET})`}
+                    </div>
+                  </div>
+                </div>
+                <span
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold ${
+                    hasScienceBotBadge(gameState.wallEScansCount)
+                      ? 'bg-amber-400 text-slate-950'
+                      : 'bg-slate-800 text-cyan-300'
+                  }`}
+                >
+                  {gameState.wallEScansCount}/{SCIENCE_BOT_SCAN_TARGET} SCANS
+                </span>
+              </div>
+
+              <form
+                onSubmit={(e) => handleSaveQuickDailyLog(e, gameState.sol)}
+                className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label
+                    htmlFor="modal-daily-log-input"
+                    className="text-xs font-bold text-emerald-300"
+                  >
+                    Write a Daily Log for Sol {gameState.sol} ({MISSION_SITES[gameState.siteId].name})
+                  </label>
+                  <span className="text-[11px] font-mono text-slate-400">
+                    O2 {gameState.oxygen}% · Food {gameState.food}% · Rad {gameState.radiationMsv}mSv
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    'Allocated extra kW to Life Support O2',
+                    'Pumped Water-Wall Shield for incoming flare',
+                    'Planted & misted Bio-Dome greens',
+                    'Cleaned EVA solar panels with rover brush',
+                  ].map((idea) => (
+                    <button
+                      key={idea}
+                      type="button"
+                      onClick={() => {
+                        setQuickDailyNote(idea);
+                        setDailyLogFeedback('');
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-700 hover:border-emerald-400 text-[11px] text-cyan-300 cursor-pointer"
+                    >
+                      + {idea}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    id="modal-daily-log-input"
+                    type="text"
+                    maxLength={240}
+                    value={quickDailyNote}
+                    onChange={(e) => {
+                      setQuickDailyNote(e.target.value);
+                      if (dailyLogFeedback) setDailyLogFeedback('');
+                    }}
+                    placeholder={`What happened on Sol ${gameState.sol}? Save a note...`}
+                    className="flex-1 px-3.5 py-2 rounded-lg bg-slate-950 border border-slate-700 text-sm text-white"
+                  />
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-lg bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-bold text-xs sm:text-sm cursor-pointer whitespace-nowrap"
+                  >
+                    Save Sol {gameState.sol} Log
+                  </button>
+                </div>
+                {dailyLogFeedback && (
+                  <div className="text-xs font-mono text-emerald-300">{dailyLogFeedback}</div>
+                )}
+              </form>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono text-slate-400">
+                    SAVED LOCAL PROGRESS HISTORY ({dailyLogs.length} ENTRIES)
+                  </span>
+                  {dailyLogs.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDailyLogs([]);
+                        writeLocalDailyLogs([]);
+                      }}
+                      className="text-[11px] font-mono text-rose-400 hover:text-rose-300 cursor-pointer"
+                    >
+                      Clear Local History
+                    </button>
+                  )}
+                </div>
+
+                {dailyLogs.length === 0 ? (
+                  <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-400 text-center">
+                    No Daily Logs recorded yet! Write your first note above or right after clicking
+                    Next Sol.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    {dailyLogs.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                          <span className="font-bold text-cyan-300">
+                            Sol {entry.sol} · {entry.siteId.toUpperCase()} · {entry.donkiClass}
+                          </span>
+                          <span className="text-slate-400">
+                            {new Date(entry.createdAtIso).toLocaleDateString()} · {entry.tasksCompletedCount}/{OUTPOST_ROOMS.length} Tasks
+                          </span>
+                        </div>
+                        <p className="text-sm text-white">“{entry.note}”</p>
+                        <div className="text-[11px] font-mono text-slate-400">
+                          O2 {entry.oxygen}% · Food {entry.food}% · Rad {entry.radiationMsv}mSv · Science {entry.scienceScore}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 7. DYNAMIC MISSION EVENT MODAL */}
@@ -1392,6 +2250,43 @@ export default function App() {
               </div>
             </div>
 
+            {/* Achievement Badges Summary (Science Bot 10-Scan Badge) */}
+            <div
+              data-testid="gameover-science-bot-badge"
+              className={`p-3 rounded-xl border flex flex-wrap items-center justify-between gap-2 ${
+                endSnapshot.scienceBotEarned
+                  ? 'bg-amber-500/15 border-amber-400 text-amber-200'
+                  : 'bg-slate-900/90 border-slate-700 text-slate-300'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 text-left">
+                <span className="text-2xl" aria-hidden="true">
+                  {endSnapshot.scienceBotEarned ? '🏅' : '🤖'}
+                </span>
+                <div>
+                  <div className="text-xs font-bold">
+                    {endSnapshot.scienceBotEarned
+                      ? 'ACHIEVEMENT UNLOCKED: Science Bot Badge!'
+                      : 'Science Bot Badge (Locked)'}
+                  </div>
+                  <div className="text-[11px] font-mono text-slate-300">
+                    {endSnapshot.scienceBotEarned
+                      ? `Awarded in Mission Log for ${endSnapshot.wallEScansCount} successful WALL·E scans!`
+                      : `Completed ${endSnapshot.wallEScansCount}/${SCIENCE_BOT_SCAN_TARGET} WALL·E station scans during this 7-Sol mission.`}
+                  </div>
+                </div>
+              </div>
+              <span
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold ${
+                  endSnapshot.scienceBotEarned
+                    ? 'bg-amber-400 text-slate-950'
+                    : 'bg-slate-800 text-slate-300'
+                }`}
+              >
+                {endSnapshot.scienceBotEarned ? 'EARNED ✓' : `${endSnapshot.wallEScansCount}/${SCIENCE_BOT_SCAN_TARGET}`}
+              </span>
+            </div>
+
             {/* MISSION LOGBOOK SECTION: Daily Survival Milestones + Personal Observation Form */}
             <div className="p-4 rounded-2xl bg-[#090E1A] border border-slate-700/80 space-y-4 text-left">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1434,7 +2329,7 @@ export default function App() {
                         <span className="text-amber-300">{m.donkiClass}</span>
                       </div>
                       <div className="text-slate-300 font-mono text-[11px]">
-                        O2 {m.oxygen}% · Food {m.food}% · Rad {m.radiationMsv}mSv · {m.tasksCompleted.length}/6 tasks
+                        O2 {m.oxygen}% · Food {m.food}% · Rad {m.radiationMsv}mSv · {m.tasksCompleted.length}/{OUTPOST_ROOMS.length} tasks
                       </div>
                       {m.eventDecision && (
                         <div className="text-cyan-300 text-[11px] truncate">

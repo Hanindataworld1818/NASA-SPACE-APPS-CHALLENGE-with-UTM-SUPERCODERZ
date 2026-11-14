@@ -1,5 +1,18 @@
 export type MissionSiteId = 'moon' | 'mars';
 
+export type OutpostMapVariant = 'classic' | 'frontier';
+
+export interface OutpostMapDesignMeta {
+  id: OutpostMapVariant;
+  siteId: MissionSiteId;
+  name: string;
+  badge: string;
+  tagline: string;
+  terrainColor: string;
+  terrainAccent: string;
+  skyAccent: string;
+}
+
 export interface MissionSiteConfig {
   id: MissionSiteId;
   name: string;
@@ -38,6 +51,7 @@ export interface NasaDonkiEvent {
 
 export interface NasaOsdrStudy {
   accessionId: string;
+  categoryTag: 'plants' | 'radiation' | 'bone' | 'muscle' | 'immune' | 'sleep' | 'lifesupport';
   title: string;
   organism: string;
   mission: string;
@@ -45,6 +59,74 @@ export interface NasaOsdrStudy {
   kidLesson: string;
   gameplayLink: string;
   sourceUrl: string;
+}
+
+export interface RadLabBenchmark {
+  id: string;
+  location: string;
+  instrument: string;
+  dailyDoseMsv: number;
+  dailyDoseUgy: number;
+  protectionLevel: string;
+  kidNote: string;
+  accentColor: string;
+}
+
+export interface MarsTrekLayer {
+  id: string;
+  label: string;
+  instrument: string;
+  layerPath: string;
+  description: string;
+}
+
+export interface MarsTrekLandmark {
+  id: string;
+  name: string;
+  missionTag: string;
+  lat: number;
+  lon: number;
+  elevationMeters: number;
+  tempRange: string;
+  kidFact: string;
+}
+
+export interface MarsRoverPhoto {
+  id: string;
+  sol: number;
+  earthDate: string;
+  cameraName: string;
+  title: string;
+  caption: string;
+  imgSrc: string;
+}
+
+export interface NasaApodSpotlight {
+  status: 'live' | 'live-images-api' | 'archive';
+  title: string;
+  date: string;
+  explanation: string;
+  imageUrl: string;
+  copyright: string;
+}
+
+export interface CsaStemActivity {
+  id: string;
+  titleEn: string;
+  titleFr: string;
+  ageRange: string;
+  missionFocus: string;
+  challengePrompt: string;
+  kidTakeaway: string;
+  sourceUrl: string;
+}
+
+export interface CsaFoodComparison {
+  id: string;
+  topic: string;
+  moonMarsChallenge: string;
+  earthArcticConnection: string;
+  csaSolution: string;
 }
 
 export const MISSION_SITES: Record<MissionSiteId, MissionSiteConfig> = {
@@ -85,6 +167,63 @@ export const MISSION_SITES: Record<MissionSiteId, MissionSiteConfig> = {
       '14-minute radio delay to Earth means YOU must make emergency choices yourself! Watch out for red dust coating the solar panels.',
   },
 };
+
+export const OUTPOST_MAP_DESIGNS: Record<
+  MissionSiteId,
+  Record<OutpostMapVariant, OutpostMapDesignMeta>
+> = {
+  mars: {
+    classic: {
+      id: 'classic',
+      siteId: 'mars',
+      name: 'Jezero Delta Core',
+      badge: 'Original Map',
+      tagline: 'Ochre river delta plains, sandbag yards, Jezero picnic bench & Copter pad.',
+      terrainColor: '#431407',
+      terrainAccent: '#7C2D12',
+      skyAccent: '#F97316',
+    },
+    frontier: {
+      id: 'frontier',
+      siteId: 'mars',
+      name: 'Valles Canyon Rim',
+      badge: 'New Ring Map',
+      tagline: 'Crimson canyon chasm, full skybridge loop corridors, thermal vents & drill rig.',
+      terrainColor: '#2B0C1E',
+      terrainAccent: '#6B1D36',
+      skyAccent: '#FB7185',
+    },
+  },
+  moon: {
+    classic: {
+      id: 'classic',
+      siteId: 'moon',
+      name: 'Shackleton Rim Core',
+      badge: 'Original Map',
+      tagline: 'Bright ejecta craters, icy Shackleton H2O seam, Artemis flag & cryo chests.',
+      terrainColor: '#1E293B',
+      terrainAccent: '#334155',
+      skyAccent: '#38BDF8',
+    },
+    frontier: {
+      id: 'frontier',
+      siteId: 'moon',
+      name: 'Tranquillity Lava-Tube Ring',
+      badge: 'New Ring Map',
+      tagline: 'Indigo basalt maria, glowing lava-tube skylights, skyways & Earthrise deck.',
+      terrainColor: '#0B132B',
+      terrainAccent: '#1D2D50',
+      skyAccent: '#22D3EE',
+    },
+  },
+};
+
+export function getOutpostMapDesign(
+  siteId: MissionSiteId,
+  mapVariant: OutpostMapVariant = 'classic'
+): OutpostMapDesignMeta {
+  return OUTPOST_MAP_DESIGNS[siteId][mapVariant] || OUTPOST_MAP_DESIGNS[siteId].classic;
+}
 
 /**
  * Curated real historical NASA DONKI (Space Weather Database Of Notifications,
@@ -222,6 +361,7 @@ export const CURATED_NASA_DONKI_SCHEDULE: NasaDonkiEvent[] = [
 export const NASA_OSDR_STUDIES: NasaOsdrStudy[] = [
   {
     accessionId: 'OSD-379 / GLDS-379',
+    categoryTag: 'plants',
     title: 'Plant Growth in Authentic Apollo Lunar Regolith (Arabidopsis thaliana)',
     organism: 'Thale Cress & Space Crops (Paul, Ferl et al., 2022)',
     mission: 'Apollo 11, 12, 17 Samples · NASA OSDR',
@@ -233,37 +373,323 @@ export const NASA_OSDR_STUDIES: NasaOsdrStudy[] = [
     sourceUrl: 'https://osdr.nasa.gov/bio/repo/data/studies/OSD-379',
   },
   {
-    accessionId: 'OSD-242 / RAD-MSL',
-    title: 'Astronaut Radiation Dosimetry & DNA Repair Under Deep Space Ionizing Radiation',
-    organism: 'Human Crew & Biological Dosimeters (Curiosity RAD & ISS Bio-Monitors)',
-    mission: 'Mars Science Laboratory (Curiosity RAD) & NASA OSDR',
+    accessionId: 'OSD-342 / RR-19',
+    categoryTag: 'bone',
+    title: 'Protecting Skeletal Muscle & Bone Density During Microgravity Spaceflight',
+    organism: 'Mus musculus (33 Days aboard ISS)',
+    mission: 'International Space Station Rodent Research · NASA OSDR',
     keyFinding:
-      'Deep-space Galactic Cosmic Rays deliver ~0.64 to 1.1 mSv per day, while a single unshielded Solar Particle Event (SPE) can add 20–50+ mSv in hours, damaging cells.',
+      'Without Earth gravity pulling on skeletons, spaceflight accelerates bone mineral loss and muscle weakening unless crews combine resistive exercise and targeted nutrition.',
     kidLesson:
-      'Hydrogen-rich water walls and magnetic shields block fast solar protons! Keeping crew dose below 50 mSv protects astronaut DNA.',
-    gameplayLink: 'Radiation Vault Water-Wall Alignment & Dose Meter (mSv)',
-    sourceUrl: 'https://osdr.nasa.gov/bio/repo/',
+      'Floating feels cool, but bones get sleepy in low gravity! Eating protein + Vitamin D & Calcium crops from the Bio-Dome keeps astronauts strong.',
+    gameplayLink: 'CSA Space Nutrition Plate & EVA Fitness',
+    sourceUrl: 'https://osdr.nasa.gov/bio/repo/data/studies/OSD-342',
+  },
+  {
+    accessionId: 'OSD-103 / RR-1',
+    categoryTag: 'muscle',
+    title: 'Muscle Fiber Adaptation & Recovery After Spaceflight',
+    organism: 'Mus musculus & Human Crew Analogues',
+    mission: 'SpaceX CRS / ISS Space Biology · NASA OSDR',
+    keyFinding:
+      'Weight-bearing calf and back muscles shrink fastest in microgravity and low Moon/Mars gravity (0.17g–0.38g), requiring high-energy meals (1,900–3,200 kcal/day).',
+    kidLesson:
+      'Moon gravity is 1/6th of Earth! Keeping Food Rations full gives your crew the energy needed for dusty EVA solar-panel repairs.',
+    gameplayLink: 'Food Rations & Rover EVA Solar Cleaning',
+    sourceUrl: 'https://osdr.nasa.gov/bio/repo/data/studies/OSD-103',
+  },
+  {
+    accessionId: 'OSD-530 / Twins-Immune',
+    categoryTag: 'immune',
+    title: 'Astronaut Immune System & Microbial Shift Under Isolation and Radiation',
+    organism: 'Human Crew & Microbial Swabs',
+    mission: 'ISS Environmental & Immune Monitoring · NASA OSDR',
+    keyFinding:
+      'Spaceflight stress, radiation, and closed cabin air alter immune white blood cells and cabin microbes, making clean O2 filters and fresh greens essential.',
+    kidLesson:
+      'Dirty cabin filters stress astronaut immune cells! Zapping grime in the O2 Electrolyzer Bay keeps the whole crew healthy.',
+    gameplayLink: 'O2 Electrolyzer Bay Filter Zapper',
+    sourceUrl: 'https://osdr.nasa.gov/bio/repo/data/studies/OSD-530',
+  },
+  {
+    accessionId: 'OSD-274 / Circadian',
+    categoryTag: 'sleep',
+    title: 'Circadian Rhythm, Sleep Cycles & Lighting Spectra on Mars Sols',
+    organism: 'Drosophila & Human Crew Shift Studies',
+    mission: 'ISS Solid-State Lighting & Mars 24h39m Sol Research · NASA OSDR',
+    keyFinding:
+      'A Martian Sol lasts 24 hours 39 minutes and lacks Earth blue sky cues. Blue-enriched morning lighting and strict rest cycles prevent crew fatigue mistakes.',
+    kidLesson:
+      'Notice the Next Sol (Sleep & Run Night) cycle! Resting your crew after completing tasks prevents careless breaker errors.',
+    gameplayLink: 'Sol-by-Sol Sleep Cycle & Grow-Room Blue/Red LED Balance',
+    sourceUrl: 'https://osdr.nasa.gov/bio/repo/data/studies/OSD-274',
+  },
+  {
+    accessionId: 'OSD-242 / RAD-MSL',
+    categoryTag: 'radiation',
+    title: 'Astronaut Radiation Dosimetry & DNA Repair Under Deep Space Ionizing Radiation',
+    organism: 'Human Crew & Biological Dosimeters (Curiosity RAD & ISS DosTel)',
+    mission: 'Mars Science Laboratory & NASA OSDR RadLab',
+    keyFinding:
+      'Deep-space Galactic Cosmic Rays deliver ~0.64 to 1.1 mSv per day, while an unshielded Solar Particle Event adds 20–50+ mSv in hours, damaging DNA.',
+    kidLesson:
+      'Hydrogen-rich water walls block fast solar protons! Keeping crew dose below 60 mSv protects astronaut DNA.',
+    gameplayLink: 'Radiation Vault Water-Wall Pump & Lock Shield',
+    sourceUrl: 'https://visualization.osdr.nasa.gov/radlab/gui/overview/',
   },
   {
     accessionId: 'MOXIE / ISS-ECLSS',
+    categoryTag: 'lifesupport',
     title: 'Environmental Control and Life Support System (ECLSS) & Water Electrolysis',
     organism: 'Human Crew Metabolic Loop (0.84 kg O2/day per astronaut)',
     mission: 'ISS ECLSS & Mars Perseverance MOXIE',
     keyFinding:
-      'Splitting water (2H2O -> 2H2 + O2) and scrubbing CO2 requires continuous electrical power (~1.5–2.5 kW). Turning off life support to save power causes CO2 buildup within hours.',
+      'Splitting water (2H2O -> 2H2 + O2) and scrubbing CO2 requires continuous electrical power (~1.5–2.5 kW).',
     kidLesson:
       'Breathing in space isn’t free! Every breath needs electricity to split water molecules and clean out carbon dioxide.',
-    gameplayLink: 'O2 Scrubber & Electrolyzer Power Trade-Off',
+    gameplayLink: 'O2 Scrubber & Power Grid Trade-Off',
     sourceUrl: 'https://www.nasa.gov/reference/eclss/',
   },
 ];
 
+export const RADLAB_BENCHMARKS: RadLabBenchmark[] = [
+  {
+    id: 'earth-ground',
+    location: 'Earth Surface (Sea Level)',
+    instrument: 'Thick Atmosphere + Magnetic Field',
+    dailyDoseMsv: 0.008,
+    dailyDoseUgy: 2.4,
+    protectionLevel: '99.5% Natural Shield',
+    kidNote: 'Earth’s air blanket and magnetic bubble block almost all space radiation!',
+    accentColor: '#10B981',
+  },
+  {
+    id: 'iss-leo',
+    location: 'ISS Low Earth Orbit (~400 km)',
+    instrument: 'OSDR RadLab · DosTel1 / REM',
+    dailyDoseMsv: 0.55,
+    dailyDoseUgy: 245,
+    protectionLevel: 'Earth Magnetosphere Partial Shield',
+    kidNote: 'Inside Earth’s magnetic belt, astronauts still get ~70x more radiation than on Earth.',
+    accentColor: '#38BDF8',
+  },
+  {
+    id: 'mars-surface',
+    location: 'Mars Surface (Jezero / Gale)',
+    instrument: 'Curiosity RAD (RadLab Archive)',
+    dailyDoseMsv: 0.64,
+    dailyDoseUgy: 210,
+    protectionLevel: 'Thin 1% CO2 Atmosphere + Planet Mass',
+    kidNote: 'Mars’ body blocks rays from below, and its thin sky blocks a tiny fraction from above.',
+    accentColor: '#F97316',
+  },
+  {
+    id: 'moon-surface',
+    location: 'Moon South Pole (Artemis)',
+    instrument: 'Lunar LRO CRaTER',
+    dailyDoseMsv: 1.1,
+    dailyDoseUgy: 390,
+    protectionLevel: 'Zero Atmosphere · High Exposure',
+    kidNote: 'No air at all! Lunar habitats need thick water walls or regolith sandbags overhead.',
+    accentColor: '#A855F7',
+  },
+];
+
+export const MARS_TREK_LAYERS: MarsTrekLayer[] = [
+  {
+    id: 'viking',
+    label: 'Viking True-Color Mosaic',
+    instrument: 'NASA Viking Orbiter MDIM 2.1 (232m/px)',
+    layerPath: 'Mars_Viking_MDIM21_ClrMosaic_global_232m',
+    description: 'Authentic global red-iron oxide dust, dark basalt plains, and crater rims.',
+  },
+  {
+    id: 'mola',
+    label: 'MOLA Laser Elevation Map',
+    instrument: 'Mars Global Surveyor MOLA Color Shaded (463m/px)',
+    layerPath: 'Mars_MGS_MOLA_ClrShade_merge_global_463m',
+    description: 'Purple/Blue = deep ancient ocean basins & craters; Red/White = giant volcanoes!',
+  },
+];
+
+export const MARS_TREK_LANDMARKS: MarsTrekLandmark[] = [
+  {
+    id: 'jezero',
+    name: 'Jezero Crater Delta (Your Outpost)',
+    missionTag: 'Perseverance Rover · Mars 2020',
+    lat: 18.38,
+    lon: 77.58,
+    elevationMeters: -2560,
+    tempRange: '-88°C to -12°C',
+    kidFact: 'Once held an ancient lake and river delta! Scientists hunt for ancient microbial fossils here.',
+  },
+  {
+    id: 'gale',
+    name: 'Gale Crater & Mount Sharp',
+    missionTag: 'Curiosity Rover · RAD Dosimeter',
+    lat: -5.4,
+    lon: 137.8,
+    elevationMeters: -4500,
+    tempRange: '-82°C to 0°C',
+    kidFact: 'Home to the Curiosity RAD sensor that measured the real 0.64 mSv/sol radiation baseline in this game!',
+  },
+  {
+    id: 'olympus',
+    name: 'Olympus Mons Shield Volcano',
+    missionTag: 'Solar System’s Tallest Mountain',
+    lat: 18.65,
+    lon: -133.8,
+    elevationMeters: 21229,
+    tempRange: '-110°C to -30°C',
+    kidFact: 'Nearly 3x taller than Mount Everest! Notice how dark white/red it glows on the MOLA Elevation map.',
+  },
+  {
+    id: 'valles',
+    name: 'Valles Marineris Grand Canyon',
+    missionTag: '4,000 km Tectonic Rift',
+    lat: -13.9,
+    lon: -59.2,
+    elevationMeters: -7000,
+    tempRange: '-75°C to +5°C',
+    kidFact: 'So deep and wide it would stretch all the way across Canada or the United States!',
+  },
+];
+
+export function latLonToMarsTrekTile(
+  lat: number,
+  lon: number,
+  zoom: number
+): { col: number; row: number; maxCols: number; maxRows: number; fracX: number; fracY: number } {
+  const z = Math.max(1, Math.min(4, Math.round(zoom)));
+  const maxCols = Math.pow(2, z + 1);
+  const maxRows = Math.pow(2, z);
+  const normLon = ((lon + 180) % 360 + 360) % 360;
+  const exactCol = (normLon / 360) * maxCols;
+  const exactRow = (Math.max(0, Math.min(180, 90 - lat)) / 180) * maxRows;
+  const col = Math.max(0, Math.min(maxCols - 1, Math.floor(exactCol)));
+  const row = Math.max(0, Math.min(maxRows - 1, Math.floor(exactRow)));
+  return {
+    col,
+    row,
+    maxCols,
+    maxRows,
+    fracX: exactCol - col,
+    fracY: exactRow - row,
+  };
+}
+
+export function getMarsTrekTileUrl(
+  layerPath: string,
+  zoom: number,
+  row: number,
+  col: number,
+  planet: 'Mars' | 'Moon' = 'Mars'
+): string {
+  return `/api/nasa/trek-tile?planet=${planet}&layer=${encodeURIComponent(layerPath)}&z=${zoom}&row=${row}&col=${col}`;
+}
+
+export const CSA_STEM_ACTIVITIES: CsaStemActivity[] = [
+  {
+    id: 'csa-food-moon',
+    titleEn: 'Food Production on the Moon & Remote Areas',
+    titleFr: 'Production alimentaire sur la Lune et en régions éloignées',
+    ageRange: 'Ages 7–14',
+    missionFocus: 'Controlled Environment Agriculture (CEA) & Nutrition',
+    challengePrompt:
+      'Design a closed-loop greenhouse that grows 1,900–3,200 kcal/day with recycled water and Red/Blue LEDs—without wasting electricity needed for oxygen.',
+    kidTakeaway:
+      'Fresh leafy greens boost astronaut Vitamin C and happiness, AND the same tech feeds northern Arctic communities like Nunavut year-round!',
+    sourceUrl:
+      'https://www.asc-csa.gc.ca/eng/educators/toolkit/food-production-on-the-moon-and-in-remote-areas.asp',
+  },
+  {
+    id: 'csa-deep-space-food',
+    titleEn: 'Deep Space Food Challenge & CANGrow Lab',
+    titleFr: 'Défi de l’alimentation dans l’espace lointain (CANGrow)',
+    ageRange: 'Ages 8–12',
+    missionFocus: 'Sustainable Closed-Loop Food Systems',
+    challengePrompt:
+      'Can you grow crunchy Mizuna lettuce, Dwarf Wheat, and Astro Radishes using minimal water and zero soil dirt?',
+    kidTakeaway:
+      'Hydroponic misting recycles up to 95% of water! You practice this exact skill inside the AstroBase Bio-Dome mini-game.',
+    sourceUrl:
+      'https://www.asc-csa.gc.ca/eng/youth-educators/resources-stem-and-youth-organizations.asp',
+  },
+  {
+    id: 'csa-canadarm-eva',
+    titleEn: 'Lunar Rover & Canadarm Surface Operations',
+    titleFr: 'Opérations robotiques lunaires et sorties extravéhiculaires',
+    ageRange: 'Ages 7–12',
+    missionFocus: 'Robotics, Telemetry & EVA Safety',
+    challengePrompt:
+      'Inspect solar panels outside the habitat and clear static regolith dust while monitoring crew radiation exposure.',
+    kidTakeaway:
+      'Robotics like Canadarm3 and lunar rovers protect astronauts from stepping into dangerous solar flares!',
+    sourceUrl:
+      'https://www.asc-csa.gc.ca/eng/youth-educators/resources-stem-and-youth-organizations.asp',
+  },
+];
+
+export const CSA_MOON_TO_ARCTIC_COMPARISON: CsaFoodComparison[] = [
+  {
+    id: 'light',
+    topic: 'Sunlight & Power Limits',
+    moonMarsChallenge: 'Lunar nights last 14 Earth days; Mars dust storms dim sunlight by 30–50%.',
+    earthArcticConnection: 'Arctic northern towns experience months of winter polar twilight.',
+    csaSolution: 'High-efficiency Red (660nm) + Blue (450nm) LED grow arrays save >40% power.',
+  },
+  {
+    id: 'water',
+    topic: 'Water & Soil Scarcity',
+    moonMarsChallenge: 'Lunar/Martian soil has sharp dust & perchlorates, and zero liquid rain.',
+    earthArcticConnection: 'Permafrost ground cannot grow traditional outdoor farm crops in winter.',
+    csaSolution: 'Closed-loop hydroponic misting recycles nearly every drop of moisture.',
+  },
+  {
+    id: 'nutrition',
+    topic: 'Fresh Vitamins & Crew Morale',
+    moonMarsChallenge: 'Packaged space meals lose Vitamin C over months in transit to Mars.',
+    earthArcticConnection: 'Fresh vegetables flown to remote communities are expensive and spoil quickly.',
+    csaSolution: 'On-site Bio-Dome microgreens deliver crisp vitamins and boost mental wellbeing!',
+  },
+];
+
+export const CSA_BILINGUAL_GLOSSARY: Array<{ en: string; fr: string; badge: string }> = [
+  { en: 'Astronaut', fr: 'Astronaute', badge: 'Crew' },
+  { en: 'Solar Flare', fr: 'Éruption solaire', badge: 'DONKI' },
+  { en: 'Radiation Shield', fr: 'Bouclier antiradiation', badge: 'RadLab' },
+  { en: 'Hydroponic Greenhouse', fr: 'Serre hydroponique', badge: 'Bio-Dome' },
+  { en: 'Oxygen Electrolyzer', fr: 'Électrolyseur d’oxygène', badge: 'ECLSS' },
+  { en: 'Mars Rover', fr: 'Astromobile martien', badge: 'EVA' },
+];
+
+export const CURATED_MARS_ROVER_PHOTOS: MarsRoverPhoto[] = [
+  {
+    id: 'curated-m2020-delta',
+    sol: 1124,
+    earthDate: '2024-04-18',
+    cameraName: 'MASTCAM-Z',
+    title: 'Jezero Crater Ancient River Delta',
+    caption: 'Layered sedimentary rocks in Jezero Crater where Perseverance searches for ancient water.',
+    imgSrc: 'https://images-assets.nasa.gov/image/PIA24331/PIA24331~medium.jpg',
+  },
+  {
+    id: 'curated-m2020-rover',
+    sol: 1210,
+    earthDate: '2024-07-15',
+    cameraName: 'NAVCAM',
+    title: 'Perseverance Traversing Martian Regolith',
+    caption: 'Fine iron-oxide dust coats Martian rocks and solar equipment—requiring EVA maintenance!',
+    imgSrc: 'https://images-assets.nasa.gov/image/PIA24428/PIA24428~medium.jpg',
+  },
+];
+
 /**
- * Fetches live recent Solar Flares from NASA's public DONKI API to enrich the NASA Science Inspector
- * while keeping gameplay deterministic and fallback-safe.
+ * Server-proxied fetchers for live NASA Open APIs (/api/nasa/* keeps API keys off the client).
  */
 export async function fetchLiveNasaDonkiFlares(): Promise<{
   status: 'live' | 'archive';
+  cmeCount?: number;
   events: Array<{
     flrID: string;
     beginTime: string;
@@ -274,40 +700,24 @@ export async function fetchLiveNasaDonkiFlares(): Promise<{
   }>;
 }> {
   try {
-    const end = new Date();
-    const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const startStr = start.toISOString().slice(0, 10);
-    const endStr = end.toISOString().slice(0, 10);
-    const url = `https://api.nasa.gov/DONKI/FLR?startDate=${startStr}&endDate=${endStr}&api_key=DEMO_KEY`;
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
-    }
-    const data = await res.json();
-    if (Array.isArray(data) && data.length > 0) {
-      return {
-        status: 'live',
-        events: data.slice(-5).reverse().map((item: Record<string, unknown>) => ({
-          flrID: String(item.flrID || 'DONKI-FLR'),
-          beginTime: String(item.beginTime || ''),
-          peakTime: String(item.peakTime || ''),
-          classType: String(item.classType || 'M1.0'),
-          sourceLocation: String(item.sourceLocation || 'Active Sunspot'),
-          link: String(item.link || 'https://kauai.ccmc.gsfc.nasa.gov/DONKI/'),
-        })),
-      };
+    const res = await fetch('/api/nasa/donki', { signal: AbortSignal.timeout(4500) });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.status === 'live' && Array.isArray(data.events) && data.events.length > 0) {
+        return {
+          status: 'live',
+          cmeCount: Number(data.cmeCount || 0),
+          events: data.events,
+        };
+      }
     }
   } catch {
-    // Graceful fallback to verified historical NASA DONKI records when offline or DEMO_KEY rate-limited
+    // Graceful fallback below
   }
 
   return {
     status: 'archive',
+    cmeCount: 3,
     events: CURATED_NASA_DONKI_SCHEDULE.filter((e) => e.eventType !== 'QUIET').map((e) => ({
       flrID: e.id,
       beginTime: `${e.date}T00:00Z`,
@@ -318,3 +728,221 @@ export async function fetchLiveNasaDonkiFlares(): Promise<{
     })),
   };
 }
+
+export async function fetchNasaApodSpotlight(): Promise<NasaApodSpotlight> {
+  try {
+    const res = await fetch('/api/nasa/apod', { signal: AbortSignal.timeout(4500) });
+    if (res.ok) {
+      const d = await res.json();
+      if (d && d.title && d.imageUrl) {
+        return d as NasaApodSpotlight;
+      }
+    }
+  } catch {
+    // Fallback below
+  }
+
+  return {
+    status: 'archive',
+    title: 'Perseverance Landing Site in Jezero Crater, Mars',
+    date: '2024-05-14',
+    explanation:
+      'Orbital HiRISE imagery showing the ancient river delta inside Jezero Crater—selected by NASA mission planners for studying past habitability and surface radiation.',
+    imageUrl: 'https://images-assets.nasa.gov/image/PIA24331/PIA24331~medium.jpg',
+    copyright: 'NASA / JPL-Caltech / University of Arizona',
+  };
+}
+
+export async function fetchLiveMarsRoverPhotos(): Promise<{
+  status: 'live' | 'archive';
+  rover: string;
+  photos: MarsRoverPhoto[];
+}> {
+  try {
+    const res = await fetch('/api/nasa/mars-photos', { signal: AbortSignal.timeout(4500) });
+    if (res.ok) {
+      const d = await res.json();
+      if (d && Array.isArray(d.photos) && d.photos.length > 0) {
+        return { status: 'live', rover: d.rover || 'Perseverance', photos: d.photos };
+      }
+    }
+  } catch {
+    // Fallback below
+  }
+  return {
+    status: 'archive',
+    rover: 'Perseverance (Mars 2020 Archive)',
+    photos: CURATED_MARS_ROVER_PHOTOS,
+  };
+}
+
+export async function searchNasaOsdrStudies(query: string): Promise<{
+  status: 'live' | 'archive';
+  totalHits: number;
+  studies: NasaOsdrStudy[];
+}> {
+  const cleanQ = query.trim();
+  const localMatches = NASA_OSDR_STUDIES.filter((s) => {
+    if (!cleanQ) return true;
+    const hay = `${s.title} ${s.categoryTag} ${s.organism} ${s.keyFinding} ${s.kidLesson}`.toLowerCase();
+    return hay.includes(cleanQ.toLowerCase());
+  });
+
+  if (!cleanQ) {
+    return { status: 'archive', totalHits: NASA_OSDR_STUDIES.length, studies: NASA_OSDR_STUDIES };
+  }
+
+  try {
+    const res = await fetch(`/api/nasa/osdr-search?q=${encodeURIComponent(cleanQ)}`, {
+      signal: AbortSignal.timeout(4500),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      if (d.status === 'live' && Array.isArray(d.studies) && d.studies.length > 0) {
+        const mapped: NasaOsdrStudy[] = d.studies.map((item: Record<string, string>) => ({
+          accessionId: item.accessionId || 'OSD-LIVE',
+          categoryTag: 'bone',
+          title: item.title || 'NASA OSDR Space Biology Study',
+          organism: item.organism || 'Spaceflight Organism',
+          mission: item.mission || 'NASA OSDR Archive',
+          keyFinding: item.keyFinding || 'Real published study from NASA Open Science Data Repository.',
+          kidLesson:
+            'Real NASA biologists publish this data openly so mission planners can keep astronauts healthy in deep space!',
+          gameplayLink: 'AstroBase Life Support & Health Trade-Offs',
+          sourceUrl: item.sourceUrl || 'https://osdr.nasa.gov/bio/repo/',
+        }));
+        return {
+          status: 'live',
+          totalHits: Number(d.totalHits || mapped.length),
+          studies: [...localMatches, ...mapped].slice(0, 6),
+        };
+      }
+    }
+  } catch {
+    // Fallback to curated local matches
+  }
+
+  return {
+    status: 'archive',
+    totalHits: localMatches.length,
+    studies: localMatches.length > 0 ? localMatches : NASA_OSDR_STUDIES,
+  };
+}
+
+export async function fetchRadLabTelemetry(): Promise<{
+  status: 'live' | 'archive';
+  sampleCount: number;
+  issDosTelAvgUgyDay: number;
+  samples: Array<{ timestamp: string; instrument: string; doseRateUgyPerDay: number }>;
+}> {
+  try {
+    const res = await fetch('/api/nasa/radlab', { signal: AbortSignal.timeout(4800) });
+    if (res.ok) {
+      const d = await res.json();
+      if (d && d.status === 'live' && Array.isArray(d.samples) && d.samples.length > 0) {
+        return d;
+      }
+    }
+  } catch {
+    // Fallback below
+  }
+
+  return {
+    status: 'archive',
+    sampleCount: 120,
+    issDosTelAvgUgyDay: 245.4,
+    samples: [
+      { timestamp: '2024-05-10 04:00Z', instrument: 'DosTel1', doseRateUgyPerDay: 218.2 },
+      { timestamp: '2024-05-11 01:23Z', instrument: 'DosTel1 (M8.8)', doseRateUgyPerDay: 312.6 },
+      { timestamp: '2024-05-11 16:40Z', instrument: 'DosTel1', doseRateUgyPerDay: 254.0 },
+      { timestamp: '2024-05-12 09:15Z', instrument: 'DosTel1', doseRateUgyPerDay: 236.8 },
+    ],
+  };
+}
+
+export interface OutpostGallerySlide {
+  id: string;
+  title: string;
+  zoneLabel: string;
+  coordinates: string;
+  elevationLabel: string;
+  instrument: string;
+  description: string;
+  imageUrl: string;
+  sourceTag: string;
+}
+
+const FALLBACK_MARS_GALLERY: OutpostGallerySlide[] = [
+  {
+    id: 'fallback-mars-jezero-delta',
+    title: 'Jezero Crater Delta & Shoreline Reconnaissance',
+    zoneLabel: 'Jezero Crater Delta (Your Outpost Landing Zone)',
+    coordinates: '18.38° N, 77.58° E',
+    elevationLabel: '-2,560 m Ancient Lake Basin',
+    instrument: 'NASA Mars Trek · Viking MDIM 2.1 + MRO',
+    description:
+      'Orbital true-color view over Jezero Crater’s western fan delta where ancient Martian rivers once deposited clay minerals.',
+    imageUrl: 'https://images-assets.nasa.gov/image/PIA24331/PIA24331~medium.jpg',
+    sourceTag: 'NASA Mars Trek Archive',
+  },
+  {
+    id: 'fallback-mars-perseverance-drive',
+    title: 'Perseverance Regolith & Solar Array Terrain',
+    zoneLabel: 'Jezero Crater Floor · Traverse Zone',
+    coordinates: '18.42° N, 77.49° E',
+    elevationLabel: '-2,540 m Rocky Plains',
+    instrument: 'NASA JPL Mars 2020 Navcam / Mastcam-Z',
+    description:
+      'Fine red iron-oxide dust drifts across basaltic ridges—exactly why AstroBase crews inspect satellites and solar panels on EVA.',
+    imageUrl: 'https://images-assets.nasa.gov/image/PIA24428/PIA24428~medium.jpg',
+    sourceTag: 'NASA JPL Reconnaissance',
+  },
+];
+
+const FALLBACK_MOON_GALLERY: OutpostGallerySlide[] = [
+  {
+    id: 'fallback-moon-shackleton',
+    title: 'Shackleton Crater Rim · Lunar South Pole',
+    zoneLabel: 'Artemis Base Camp (Your Chosen Landing Zone)',
+    coordinates: '89.9° S, 0.0° E',
+    elevationLabel: '+1,800 m Sunlit Ridge',
+    instrument: 'NASA Moon Trek · LRO LROC + LOLA',
+    description:
+      'Permanent sunlit peaks overlook permanently shadowed crater floors holding frozen water ice for Electrolyzer oxygen.',
+    imageUrl:
+      '/api/nasa/trek-tile?planet=Moon&layer=Lunar_LRO_LROC-WAC_Mosaic_global_100m_June2013&z=2&row=3&col=4',
+    sourceTag: 'NASA Moon Trek Archive',
+  },
+];
+
+export async function fetchOutpostImageGallery(siteId: MissionSiteId): Promise<{
+  status: 'live' | 'archive';
+  siteId: MissionSiteId;
+  slides: OutpostGallerySlide[];
+}> {
+  try {
+    const res = await fetch(`/api/nasa/mars-trek-gallery?siteId=${encodeURIComponent(siteId)}`, {
+      signal: AbortSignal.timeout(5500),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.slides) && data.slides.length > 0) {
+        return {
+          status: data.status === 'live' ? 'live' : 'archive',
+          siteId,
+          slides: data.slides,
+        };
+      }
+    }
+  } catch {
+    // Graceful fallback below
+  }
+
+  return {
+    status: 'archive',
+    siteId,
+    slides: siteId === 'moon' ? FALLBACK_MOON_GALLERY : FALLBACK_MARS_GALLERY,
+  };
+}
+
+
